@@ -4,3 +4,5 @@ cutlass_library.egg-info/
 
 build/
 .vscode/
+
+notes/examples/*.pdf
