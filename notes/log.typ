@@ -7,7 +7,7 @@
   *Log*
 ])
 
-#outline()
+#outline(indent: 2em)
 #pagebreak()
 
 
@@ -19,7 +19,9 @@
   - `export CUDACXX=$(which nvcc)`
 
 #include "./examples/00_basic_gemm.typ"
+#include "./examples/01_cutlass_utilities.typ"
+#include "./examples/02_dump_reg_shmem.typ"
+#include "./examples/05_batched_gemm.typ"
+#include "./examples/06_splitK_gemm.typ"
+
 #include "./cute/sgemm_1.typ"
-
-
-
