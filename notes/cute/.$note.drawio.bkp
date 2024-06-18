@@ -1,6 +1,26 @@
-<mxfile host="Electron" modified="2024-06-18T22:36:24.220Z" agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) draw.io/24.5.3 Chrome/124.0.6367.207 Electron/30.0.6 Safari/537.36" version="24.5.3" etag="HId3_ZR6UzOaIkFjcA1y" type="device" pages="2">
+<mxfile host="Electron" modified="2024-06-18T19:57:11.153Z" agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) draw.io/24.5.3 Chrome/124.0.6367.207 Electron/30.0.6 Safari/537.36" version="24.5.3" etag="qRuP-9-GvewjfUGqEH_f" type="device" pages="3">
+  <diagram id="EZJ33lC6CA5Ok1uogMZJ" name="cute-abstraction">
+    <mxGraphModel dx="808" dy="732" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="3Y5WVtO3NzDJgJLHni6t-1" value="&lt;font face=&quot;Martian Mono&quot; data-font-src=&quot;https://fonts.googleapis.com/css?family=Martian+Mono&quot;&gt;IntTuple&lt;/font&gt;&lt;div style=&quot;line-height: 120%;&quot;&gt;&lt;ul style=&quot;line-height: 120%;&quot;&gt;&lt;li&gt;&lt;font face=&quot;Martian Mono&quot; data-font-src=&quot;https://fonts.googleapis.com/css?family=Martian+Mono&quot;&gt;rank(IntTuple)/tuple_size: number of elements&lt;/font&gt;&lt;/li&gt;&lt;li&gt;&lt;font face=&quot;Martian Mono&quot; data-font-src=&quot;https://fonts.googleapis.com/css?family=Martian+Mono&quot;&gt;get&amp;lt;I&amp;gt;(IntTuple)&lt;/font&gt;&lt;/li&gt;&lt;li&gt;&lt;font face=&quot;Martian Mono&quot; data-font-src=&quot;https://fonts.googleapis.com/css?family=Martian+Mono&quot;&gt;depth(IntTuple)&lt;/font&gt;&lt;/li&gt;&lt;li&gt;&lt;font face=&quot;Martian Mono&quot; data-font-src=&quot;https://fonts.googleapis.com/css?family=Martian+Mono&quot;&gt;size(InputTuple): product of all elements of the IntTuple&lt;/font&gt;&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=20;fontFamily=Architects Daughter;sketch=1;hachureGap=4;jiggle=2;curveFitting=1;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;" parent="1" vertex="1">
+          <mxGeometry x="40" y="20" width="860" height="190" as="geometry" />
+        </mxCell>
+        <mxCell id="3Y5WVtO3NzDJgJLHni6t-2" value="&lt;font data-font-src=&quot;https://fonts.googleapis.com/css?family=Martian+Mono&quot; face=&quot;Martian Mono&quot;&gt;Layout=(Shape, Stride)&lt;/font&gt;" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=20;fontFamily=Architects Daughter;fontColor=default;sketch=1;hachureGap=4;jiggle=2;curveFitting=1;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;" parent="1" vertex="1">
+          <mxGeometry x="40" y="210" width="330" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="3Y5WVtO3NzDJgJLHni6t-3" value="&lt;font face=&quot;Martian Mono&quot; data-font-src=&quot;https://fonts.googleapis.com/css?family=Martian+Mono&quot;&gt;Tensor mainly consists of Layout and Data_ptr*&lt;/font&gt;" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=20;fontFamily=Ubuntu Mono;fontColor=default;sketch=1;hachureGap=4;jiggle=2;curveFitting=1;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;" parent="1" vertex="1">
+          <mxGeometry x="40" y="290" width="670" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="VHHAO2qTLGS_d8TBhZzo-1" value="&lt;p&gt;s8        :  _8:_1&lt;br&gt;d8        :  8:_1&lt;br&gt;s2xs4     :  (_2,_4):(_1,_2)&lt;br&gt;s2xd4     :  (_2,4):(_1,_2)&lt;br&gt;s2xd4_a   :  (_2,4):(_12,_1)&lt;br&gt;s2xd4_col :  (_2,4):(_1,_2)&lt;br&gt;s2xd4_row :  (_2,4):(4,_1)&lt;br&gt;s2xh4     :  (2,(2,2)):(4,(2,1))&lt;br&gt;s2xh4_col :  (2,(2,2)):(_1,(2,4))&lt;/p&gt;" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontFamily=Ubuntu Mono;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;fontSize=20;fontColor=default;" vertex="1" parent="1">
+          <mxGeometry x="160" y="440" width="180" height="170" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
   <diagram id="ln6ierspKXU4iitj8XIt" name="layout">
-    <mxGraphModel dx="2266" dy="923" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" math="1" shadow="0">
+    <mxGraphModel dx="512" dy="850" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" math="1" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
