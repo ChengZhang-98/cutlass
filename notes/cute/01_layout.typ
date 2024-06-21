@@ -1,25 +1,8 @@
 #import "../my-typst/my-style.typ": apply-my-style
 #show: apply-my-style
 
-#let separator-s = {}
-#let separator-m = {}
-
-#let presentation-mode = false
-// #set page(height: 19.05cm, width: 33.867cm)
-#if presentation-mode {
-  separator-s = {pagebreak()}
-  separator-m = {pagebreak()}
-} else {
-  separator-s = {line(length: 60%, stroke: color.teal)}
-  separator-m = {line(length: 100%, stroke: color.black)}
-}
-// #let separator-s = {
-//   line(length: 60%, stroke: color.teal)
-// }
-//
-// #let separator-m = {
-//   line(length: 100%, stroke: color.black)
-// }
+#let  separator-s = {line(length: 60%, stroke: color.teal)}
+#let  separator-m = {line(length: 100%, stroke: color.black)}
 
 = Concepts in CUTLASS.CuTe
 

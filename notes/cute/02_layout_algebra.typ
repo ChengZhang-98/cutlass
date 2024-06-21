@@ -1,18 +1,8 @@
 #import "../my-typst/my-style.typ": apply-my-style
 #show: apply-my-style
 
-#let separator-s = {}
-#let separator-m = {}
-
-#let presentation-mode = false
-// #set page(height: 19.05cm, width: 33.867cm)
-#if presentation-mode {
-  separator-s = {pagebreak()}
-  separator-m = {pagebreak()}
-} else {
-  separator-s = {line(length: 60%, stroke: color.teal)}
-  separator-m = {line(length: 100%, stroke: color.black)}
-}
+#let  separator-s = {line(length: 60%, stroke: color.teal)}
+#let  separator-m = {line(length: 100%, stroke: color.black)}
 
 = Layout Algebra
 
@@ -20,11 +10,11 @@ Maths behind CuTe's APIs to do tiling, reshape, selection, permutation ...
 
 == Coalsece
 
-Simplify layout if possible.
+Simplify layout if possible, the mapping of 1D coordinate #sym.arrow.r 1D index remains the same.
 
 == Composition
 
-Layout can be considered as a mapping from coordinates to indices.
+Layout can be considered as a mapping from 1D coordinates to indices (integers to integers).
 
 ```txt
 Functional composition, R := A o B
@@ -64,20 +54,38 @@ A `Tiler` is one of the following objects.
 - A tuple of `Tiler`s.
 - A `Shape`, which will be interpreted as a tiler of `Layout`s with stride-1.
 
+This allows composition to be applied by-mode to retrieve arbitrary sublayouts of specified modes of a tensor ("Give me the 3x5x8 subblock of this MxNxL tensor") but also allows entire tiles of data to be reshaped and reordered as if they were 1-D vectors ("Reorder this 8x16 block of data into a 32x4 block using this weird order of elements").
+
 == Complement
 
-#image("./figures/note-layout_alg_complement.svg", height: 4cm)
+`Layout complement(LayoutA const& layout_a, Shape const& cotarget)` returns a layout, which defines the "layout of the tiler A" to completing the `cotarget` (cosize) elements.
+
+#image("../../media/images/cute/complement1.png", width: 50%)
+
+In the example above, layout A is colored in gray. To complete a layout which has `cotarget=24` elements, the complement is (3,2):(2,12).
 
 == Division (Tiling)
 
 // $A #sym.slash B := A circle (B, B^*)$
 
 `logical_divide(A, B)` splits a layout `A` into two modes
-- in the first mode are all elements pointed to by `B` and
-- in the second mode are all elements not pointed to by `B`, which is an iterator over each tile of `B`.
+- in the first mode are all A elements pointed to by `B` and
+- in the second mode are all A elements not pointed to by `B`, which is an iterator over each tile of `B`.
 
 #image("../../media/images/cute/divide1.png", width: 50%)
 
+
+Other divisions:
+
+```txt
+Layout Shape : (M, N, L, ...)
+Tiler Shape  : <TileM, TileN>
+
+logical_divide : ((TileM,RestM), (TileN,RestN), L, ...)
+zipped_divide  : ((TileM,TileN), (RestM,RestN,L,...))
+tiled_divide   : ((TileM,TileN), RestM, RestN, L, ...)
+flat_divide    : (TileM, TileN, RestM, RestN, L, ...)
+```
 
 == Product (Tiling)
 
@@ -85,3 +93,15 @@ A `Tiler` is one of the following objects.
 - the first mode is the layout `A` and - the second mode is the layout `B` but with each element replaced by a "unique replication" of layout `A`
 
 #image("../../media/images/cute/product1.png", width: 50%)
+
+Other products
+
+```txt
+Layout Shape : (M, N, L, ...)
+Tiler Shape  : <TileM, TileN>
+
+logical_product : ((M,TileM), (N,TileN), L, ...)
+zipped_product  : ((M,N), (TileM,TileN,L,...))
+tiled_product   : ((M,N), TileM, TileN, L, ...)
+flat_product    : (M, N, TileM, TileN, L, ...)
+```
