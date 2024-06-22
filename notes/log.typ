@@ -24,4 +24,8 @@
 #include "./examples/05_batched_gemm.typ"
 #include "./examples/06_splitK_gemm.typ"
 
+
+#include "./cute/01_layout.typ"
+#include "./cute/02_layout_algebra.typ"
+#include "./cute/03_tensor.typ"
 #include "./cute/sgemm_1.typ"
