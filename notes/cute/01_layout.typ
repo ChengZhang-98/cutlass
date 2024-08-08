@@ -25,6 +25,8 @@ Special cases:
 - vector: any layout with rank = 1
 - matrix: any layout with rank = 2
 
+- Shape and Stride of a layout should be congruent. That is, Shape and Stride have the same tuple profiles. For every integer in Shape, there is a corresponding integer in Stride.
+
 #separator-s
 
 === `Tensor`
