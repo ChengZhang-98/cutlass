@@ -37,13 +37,14 @@ import numpy as np
 from scipy.special import erf
 
 from cutlass_library import DataType, DataTypeTag
-from cutlass.backend.c_types import MatrixCoord_
+from cutlass.backend.c_types import MatrixCoord_, tuple_factory
 from cutlass.backend.frontend import NumpyFrontend
 from cutlass.backend.library import ActivationOp, ActivationOpTag
 from cutlass.utils.datatypes import is_numpy_tensor, is_torch_available, is_torch_tensor
 
 dtype2ctype = {
     DataType.f16: ctypes.c_uint16,
+    DataType.bf16: ctypes.c_uint16,
     DataType.f32: ctypes.c_float,
     DataType.f64: ctypes.c_double,
     DataType.s8: ctypes.c_int8,
@@ -162,11 +163,15 @@ class LinearCombination(EpilogueFunctorBase):
             Epilogue params when using the default linear combination of EVT, which
             does not currently use {alpha,beta}_ptr_array
             """
+
+            stride_type = tuple_factory((0,0,1), "int64_t", [0])
             _fields_ = [
                 ("alpha", c_element_epilogue),
                 ("beta", c_element_epilogue),
                 ("alpha_ptr", ctypes.c_void_p),
                 ("beta_ptr", ctypes.c_void_p),
+                ("dalpha", stride_type),
+                ("dbeta", stride_type),
             ]
 
             def __init__(self, alpha, beta, *args) -> None:

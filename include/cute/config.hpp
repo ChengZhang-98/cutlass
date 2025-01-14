@@ -100,7 +100,7 @@
 
 #if defined(_MSC_VER)
 // Provides support for alternative operators 'and', 'or', and 'not'
-#  include <iso646.h>
+#  include <ciso646>
 #endif // _MSC_VER
 
 #if defined(__CUDACC_RTC__)
@@ -143,20 +143,7 @@
 #endif
 
 //
-// Support
-//
-
-#include <cute/util/type_traits.hpp>
-
-//
-// Basic types
-//
-
-#include <cute/numeric/numeric_types.hpp>
-
-//
 // Debugging utilities
 //
 
-#include <cute/util/print.hpp>
 #include <cute/util/debug.hpp>

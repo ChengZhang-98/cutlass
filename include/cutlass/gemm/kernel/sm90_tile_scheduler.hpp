@@ -29,8 +29,8 @@
  *
  **************************************************************************************************/
 #pragma once
-#include "cutlass/gemm/kernel/static_tile_scheduler.hpp"
 
+#include "cutlass/gemm/kernel/static_tile_scheduler.hpp"
 
 namespace cutlass::gemm::kernel::detail {
 
@@ -47,6 +47,8 @@ public:
   using RasterOrder = typename Params::RasterOrder;
   using RasterOrderOptions = typename Params::RasterOrderOptions;
   using Arguments = BaseScheduler::Arguments;
+
+  static constexpr bool IsDynamicPersistent = false;
 
   // get work_idx_m, work_idx_n from blk_per_grid_dim while applying swizzle
   static CUTLASS_DEVICE
@@ -121,14 +123,14 @@ public:
   // The basic tile scheduler does not require any additional workspace
   template <class ProblemShape, class ElementAccumulator>
   static size_t
-  get_workspace_size(Arguments const&, ProblemShape, KernelHardwareInfo const&, uint32_t, const uint32_t = 1) {
+  get_workspace_size(Arguments const&, ProblemShape, KernelHardwareInfo const&, uint32_t, const uint32_t = 1, uint32_t = 1) {
     return 0;
   }
 
   template <class ProblemShape, class ElementAccumulator>
   static cutlass::Status
   initialize_workspace(Arguments const&, void*, cudaStream_t, ProblemShape, KernelHardwareInfo const&,
-    uint32_t, const uint32_t = 1) {
+    uint32_t, const uint32_t = 1, uint32_t = 1, CudaHostAdapter* cuda_adapter = nullptr) {
     return Status::kSuccess;
   }
 

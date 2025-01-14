@@ -1,5 +1,5 @@
 /***************************************************************************************************
- * Copyright (c) 2017 - 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * Copyright (c) 2024 - 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  *
  * Redistribution and use in source and binary forms, with or without
@@ -28,95 +28,48 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  **************************************************************************************************/
-/* \file
-   \brief Instantiates GEMM reference implementations.
+
+/*! \file
+    \brief Mainloop Fusion configs specific for scale factors
 */
 
-#include "cutlass/cutlass.h"
-#include "cutlass/library/library.h"
-#include "cutlass/library/manifest.h"
+#pragma once
 
-#include "gemm_reference_operation.h"
+#include <cute/util/type_traits.hpp> // cute::void_t
+
+namespace cutlass::detail {
+
+/////////////////////////////////////////////////////////////////////////////////////////////////
+template <typename CollectiveMainloop, typename = void>
+struct ElementSFType {
+  using type = void;
+};
+
+template <typename CollectiveMainloop>
+struct ElementSFType<CollectiveMainloop, cute::void_t<typename CollectiveMainloop::ElementSF>> {
+  using type = typename CollectiveMainloop::ElementSF;
+};
+
+template <typename CollectiveMainloop, typename = void>
+struct LayoutSFAType {
+  using type = void;
+};
+
+template <typename CollectiveMainloop>
+struct LayoutSFAType<CollectiveMainloop, cute::void_t<typename CollectiveMainloop::LayoutSFA>> {
+  using type = typename CollectiveMainloop::LayoutSFA;
+};
+
+template <typename CollectiveMainloop, typename = void>
+struct LayoutSFBType {
+  using type = void;
+};
+
+template <typename CollectiveMainloop>
+struct LayoutSFBType<CollectiveMainloop, cute::void_t<typename CollectiveMainloop::LayoutSFB>> {
+  using type = typename CollectiveMainloop::LayoutSFB;
+};
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
-namespace cutlass {
-namespace library {
-
-///////////////////////////////////////////////////////////////////////////////////////////////////
-
-void initialize_gemm_reference_operations_int8_canonical(Manifest &manifest) {
-  make_gemm_real_canonical_layouts<
-    int8_t,
-    int8_t,
-    int32_t,
-    int32_t,
-    int32_t
-  >(manifest);
-
-  make_gemm_real_canonical_layouts<
-    int8_t,
-    int8_t,
-    int8_t,
-    float,
-    int32_t,
-    int8_t,
-    NumericConverterClamp<int8_t, float>
-  >(manifest);
-
-  make_gemm_real_canonical_layouts<
-    int8_t,
-    int8_t,
-    int32_t,
-    float,
-    int32_t,
-    int32_t,
-    NumericConverterClamp<int32_t, float>
-  >(manifest);
-
-  make_gemm_real_canonical_layouts<
-    uint8_t,
-    uint8_t,
-    int32_t,
-    int32_t,
-    int32_t
-  >(manifest);
-
-  make_gemm_real_canonical_layouts<
-    uint8_t,
-    uint8_t,
-    int8_t,
-    float,
-    int32_t,
-    int8_t,
-    NumericConverterClamp<int8_t, float>
-  >(manifest);
-
-  make_gemm_real_canonical_layouts<
-    uint8_t,
-    uint8_t,
-    int32_t,
-    float,
-    int32_t,
-    int32_t,
-    NumericConverterClamp<int32_t, float>
-  >(manifest);
-
-  make_gemm_real_canonical_layouts<
-    int8_t,
-    int8_t,
-    int8_t,   
-    int32_t,
-    int32_t,
-    int8_t,
-    NumericConverterClamp<int8_t, int32_t>
-  >(manifest);
-}
-
-///////////////////////////////////////////////////////////////////////////////////////////////////
-
-} // namespace library
-} // namespace cutlass
-
-///////////////////////////////////////////////////////////////////////////////////////////////////
-
+} // namespace cutlass::detail

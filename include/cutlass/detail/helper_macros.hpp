@@ -57,6 +57,12 @@
 #define CUTLASS_DEVICE inline
 #endif
 
+#if ! defined(_MSC_VER)
+#define CUTLASS_LAMBDA_FUNC_INLINE __attribute__((always_inline))
+#else
+#define CUTLASS_LAMBDA_FUNC_INLINE [[msvc::forceinline]]
+#endif
+
 #define CUTLASS_HOST __host__
 #define CUTLASS_GLOBAL __global__ static
 
@@ -74,11 +80,11 @@ CUTLASS_HOST_DEVICE void __CUTLASS_UNUSED(T const &)
 
 #ifdef _MSC_VER
 // Provides support for alternative operators 'and', 'or', and 'not'
-#include <iso646.h>
+#include <ciso646>
 #endif // _MSC_VER
 
 #if !defined(__CUDACC_RTC__)
-#include <assert.h>
+#include <cassert>
 #endif
 
 #if defined(__CUDA_ARCH__)
@@ -93,6 +99,44 @@ CUTLASS_HOST_DEVICE void __CUTLASS_UNUSED(T const &)
   #else
     #define CUTLASS_NOT_IMPLEMENTED() assert(0 && __PRETTY_FUNCTION__)
   #endif
+#endif
+
+// CUTLASS_CMATH_NAMESPACE is the namespace where code can find
+// <cmath> functions like isnan and log.  Such functions are in
+// the std namespace in host code, but in the global namespace
+// in device code.
+//
+// The intended use case for this macro is in "using" declarations
+// for making argument-dependent lookup (ADL) work in generic code.
+// For example, if T is cutlass::half_t, the following code will
+// invoke cutlass::isnan(half_t).  If T is float, it will invoke
+// std::isnan on host and ::isnan on device.  (CUTLASS's support
+// for NVRTC prevents it from using things in the std namespace
+// in device code.)  Correct use of "using" declarations can help
+// avoid unexpected implicit conversions, like from half_t to float.
+//
+// template<class T>
+// bool foo(T x) {
+//   using CUTLASS_CMATH_NAMESPACE :: isnan;
+//   return isnan(x);
+// }
+//
+// Without this macro, one would need to write the following.
+//
+// template<class T>
+// bool foo(T x) {
+// #if defined(__CUDA_ARCH__)
+//   using ::isnan;
+// #else
+//   using std::isnan;
+// #endif
+//   return isnan(x);
+// }
+
+#if defined(__CUDA_ARCH__)
+#  define CUTLASS_CMATH_NAMESPACE
+#else
+#  define CUTLASS_CMATH_NAMESPACE std
 #endif
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////

@@ -35,6 +35,7 @@
 #pragma once
 
 #include "cutlass/cutlass.h"
+#include "cutlass/detail/collective.hpp"
 #include "cutlass/library/library.h"
 #include "library_internal.h"
 #include "cutlass/gemm/dispatch_policy.hpp"
@@ -249,6 +250,9 @@ protected:
 
     /* Query device SM count to pass onto the kernel as an argument, where needed */
     operator_args.hw_info.sm_count = arguments->sm_count;
+    if constexpr (!std::is_const_v<decltype(operator_args.scheduler.max_swizzle_size)>) {
+      operator_args.scheduler.max_swizzle_size = arguments->swizzle_size;
+    }
 
     if constexpr (!std::is_const_v<decltype(operator_args.scheduler.raster_order)>) {
       using Enum_t = decltype(operator_args.scheduler.raster_order);
@@ -278,17 +282,18 @@ public:
       static_cast<GemmUniversalArguments const *>(arguments_ptr);
 
     OperatorArguments args;
-    auto status = update_arguments_(args, arguments);
-    if (status != Status::kSuccess) {
-      return status;
-    }
-
     // can_implement rules may need access to problem shape
     args.problem_shape = cute::make_shape(
       configuration->problem_size.m(),
       configuration->problem_size.n(),
       configuration->problem_size.k(),
       configuration->batch_count);
+
+    auto status = update_arguments_(args, arguments);
+    if (status != Status::kSuccess) {
+      return status;
+    }
+
     return Operator::can_implement(args);
   }
 
@@ -327,7 +332,8 @@ public:
       void const *arguments_ptr,
       void *host_workspace,
       void *device_workspace = nullptr,
-      cudaStream_t stream = nullptr) const override {
+      cudaStream_t stream = nullptr,
+      bool launch_with_pdl = false) const override {
 
     OperatorArguments args;
     Status status = update_arguments_(args, static_cast<GemmUniversalArguments const *>(arguments_ptr));
@@ -337,7 +343,7 @@ public:
 
     Operator *op = static_cast<Operator *>(host_workspace);
     // We need to call initialize() since we have to rebuild TMA desc for every new set of args
-    status = op->run(args, device_workspace, stream);
+    status = op->run(args, device_workspace, stream, nullptr, launch_with_pdl);
     return status;
   }
 };

@@ -32,9 +32,11 @@
 #include "cutlass_unit_test.h"
 
 #include <cutlass/trace.h>
-
 #include <iostream>
-
+#include <cute/layout.hpp>
+#include <cute/layout_composed.hpp>  // cute::composition
+#include <cute/swizzle.hpp>          // cute::Swizzle
+#include <cute/swizzle_layout.hpp>   // cute::composition
 #include <cute/tensor.hpp>
 
 using namespace cute;
@@ -102,7 +104,7 @@ TEST(CuTe_core, Inverse_left)
   auto layout = Layout<Shape <_8, _4>,
                        Stride<_4, _1>>{};
 
-  test_left_inverse(filter(layout));
+  test_left_inverse(layout);
   }
 
   {

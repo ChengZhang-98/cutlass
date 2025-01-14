@@ -35,15 +35,12 @@
     \brief Utilities for selecting default tile schedulers
 */
 
+#include "cutlass/arch/arch.h"
 #include "cutlass/detail/dependent_false.hpp"
-#include "cutlass/gemm/kernel/sm90_tile_scheduler.hpp"
-#include "cutlass/gemm/kernel/sm90_tile_scheduler_stream_k.hpp"
-#include "cutlass/gemm/kernel/sm90_tile_scheduler_group.hpp"
+
 ////////////////////////////////////////////////////////////////////////////////
 
 namespace cutlass::gemm {
-
-////////////////////////////////////////////////////////////////////////////////
 
 //
 // Tags for specifying tile schedulers
@@ -55,10 +52,12 @@ struct StreamKScheduler { };
 
 struct GroupScheduler { }; // Only used for Grouped GEMMs
 
+} // namespace cutlass::gemm
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace cutlass::gemm
-
+#include "cutlass/gemm/kernel/sm90_tile_scheduler.hpp"
+#include "cutlass/gemm/kernel/sm90_tile_scheduler_stream_k.hpp"
+#include "cutlass/gemm/kernel/sm90_tile_scheduler_group.hpp"
 ////////////////////////////////////////////////////////////////////////////////
 
 namespace cutlass::gemm::kernel::detail {
@@ -85,10 +84,10 @@ template <
   class ClusterShape
 >
 struct TileSchedulerSelector<
-  PersistentScheduler,
-  ArchTag,
-  TileShape,
-  ClusterShape
+    PersistentScheduler,
+    ArchTag,
+    TileShape,
+    ClusterShape
   > {
   using Scheduler = PersistentTileSchedulerSm90;
 };
@@ -100,16 +99,16 @@ template <
   class ClusterShape
 >
 struct TileSchedulerSelector<
-  void,
-  ArchTag,
-  TileShape,
-  ClusterShape
-  > {
-  using Scheduler = typename TileSchedulerSelector<
-    PersistentScheduler,
+    void,
     ArchTag,
     TileShape,
     ClusterShape
+  > {
+  using Scheduler = typename TileSchedulerSelector<
+      PersistentScheduler,
+      ArchTag,
+      TileShape,
+      ClusterShape
   >::Scheduler;
 };
 
@@ -118,10 +117,10 @@ template <
   class ClusterShape
 >
 struct TileSchedulerSelector<
-  StreamKScheduler,
-  arch::Sm90,
-  TileShape,
-  ClusterShape
+    StreamKScheduler,
+    arch::Sm90,
+    TileShape,
+    ClusterShape
   > {
   using Scheduler = PersistentTileSchedulerSm90StreamK<TileShape, ClusterShape>;
 };
@@ -132,11 +131,11 @@ template <
   , class GroupProblemShape
 >
 struct TileSchedulerSelector<
-  GroupScheduler,
-  arch::Sm90,
-  TileShape,
-  ClusterShape
-  , GroupProblemShape
+    GroupScheduler,
+    arch::Sm90,
+    TileShape,
+    ClusterShape
+    , GroupProblemShape
   > {
   using Scheduler = PersistentTileSchedulerSm90Group<GroupProblemShape>;
 };

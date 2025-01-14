@@ -96,6 +96,8 @@ public:
   using Params = PersistentTileSchedulerSm90GroupParams<ProblemShape>;
   using RasterOrder = typename Params::RasterOrder;
   using RasterOrderOptions = typename Params::RasterOrderOptions;
+  static constexpr bool IsDynamicPersistent = false;
+
   struct Arguments {
     int max_swizzle_size = 1;
     // Not applying Heuristics for Grouped problems, since largest dimension can change per group
@@ -118,7 +120,9 @@ public:
     KernelHardwareInfo const& hw_info,
     Arguments const& arguments,
     [[maybe_unused]] void* workspace=nullptr,
-    [[maybe_unused]] const uint32_t epilogue_subtile = 1) {
+    [[maybe_unused]] const uint32_t epilogue_subtile = 1,
+    [[maybe_unused]] uint32_t ktile_start_alignment_count = 1u
+    ) {
 
     // We only need the tile and cluster shape during scheduler setup, so let FTAD do the magic
     static_assert(cute::is_static<TileShape>::value);
@@ -151,6 +155,7 @@ public:
   CUTLASS_HOST_DEVICE static
   dim3
   get_grid_shape(
+    [[maybe_unused]] Params const& params,
     GroupProblemShape problem_shapes,
     TileShape tile_shape,
     ClusterShape cluster_shape,
@@ -204,7 +209,6 @@ public:
     );
   }
 
-  CUTLASS_HOST_DEVICE
   static bool
   can_implement(Arguments const& args) {
     return true;
@@ -333,12 +337,16 @@ public:
     uint64_t blk_per_grid_dim = divmod_cluster_shape_minor.divide(linear_idx - group_info.start_linear_idx);
     divmod_cluster_shape_major(cluster_id, cluster_major_offset, blk_per_grid_dim);
 
-    auto [cta_m_in_cluster, cta_n_in_cluster, _] = cute::block_id_in_cluster();
+    // With static schedulers, we launch grid such that all cluster are linear (1-D) order, i.e., 
+    // there can only be one cluster in the minor dimension. get_grid_shape() in scheduler params
+    // put cluster_shape.m/n() as the minor dimension based on raster order AlongN/M resp.
+    // Therefore, the offset of a CTA (inside a cluster) in the minor dimension can be directly be 
+    // inferred by the blockIdx along the minor dimension.
     if (raster_order == RasterOrder::AlongN) {
-      cluster_minor_offset = cta_m_in_cluster;
+      cluster_minor_offset = blockIdx.x;
     }
     else {
-      cluster_minor_offset = cta_n_in_cluster;
+      cluster_minor_offset = blockIdx.y;
     }
 
     uint64_t cluster_idx_minor, cluster_idx_major;
@@ -401,14 +409,14 @@ public:
   // The basic tile scheduler does not require any additional workspace
   template <class ProblemShape, class ElementAccumulator>
   static size_t
-  get_workspace_size(Arguments const&, ProblemShape, KernelHardwareInfo const&, uint32_t, const uint32_t = 1) {
+  get_workspace_size(Arguments const&, ProblemShape, KernelHardwareInfo const&, uint32_t, const uint32_t = 1, uint32_t = 1) {
     return 0;
   }
 
   template <class ProblemShape, class ElementAccumulator>
   static cutlass::Status
   initialize_workspace(Arguments const&, void*, cudaStream_t, ProblemShape, KernelHardwareInfo const&,
-    uint32_t, const uint32_t = 1) {
+    uint32_t, const uint32_t = 1, uint32_t = 1, CudaHostAdapter* cuda_adapter = nullptr) {
     return Status::kSuccess;
   }
 
@@ -480,6 +488,27 @@ public:
   requires_separate_reduction(Params const& params) {
     return false;
   }
+
+  // Kernel helper function to get next work tile
+  CUTLASS_DEVICE
+  auto
+  fetch_next_work(WorkTileInfo work_tile_info) {
+    if (continue_current_work(work_tile_info)) {
+      return cute::make_tuple(work_tile_info, true);
+    }
+
+    advance_to_next_work();
+    return cute::make_tuple(get_current_work(), true);
+  }
+  
+  // Returns the initial work tile info that will be computed over
+  template <class ClusterShape>
+  CUTLASS_DEVICE
+  WorkTileInfo
+  initial_work_tile_info(ClusterShape) {
+    return get_current_work();
+  }
+
 };
 
 } // namespace cutlass::gemm::kernel::detail

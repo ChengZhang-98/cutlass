@@ -32,6 +32,9 @@
 #pragma once
 
 #include <cutlass/numeric_conversion.h>
+#include <cutlass/layout/matrix.h>
+#include <cute/numeric/numeric_types.hpp>
+#include <cute/numeric/integral_constant.hpp> // cute::false_type
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -58,9 +61,12 @@ struct FusionOperation {
   static constexpr int AlignmentScalar = 0;
   static constexpr bool IsScaleFactorSupported = false;
   static constexpr bool IsPerRowScaleSupported = false;
+  static constexpr bool IsPerColScaleSupported = false;
+
   using ElementBias = void;
   static constexpr int AlignmentBias = 0;
   static constexpr bool IsPerRowBiasSupported = false;
+  static constexpr bool IsPerColBiasSupported = false;
   static constexpr bool IsDePerRowBiasSupported = false;
 
   using ActivationFn = void;
@@ -122,6 +128,19 @@ struct LinCombEltAct
   static constexpr bool IsEltActSupported = true;
 };
 
+// D = softmax(top_k(alpha * acc + beta * C))
+template<
+  int TopK,
+  class ElementOutput_,
+  class ElementCompute_,
+  class ElementSource_ = ElementOutput_,
+  class ElementScalar_ = ElementCompute_,
+  FloatRoundStyle RoundStyle_ = FloatRoundStyle::round_to_nearest
+>
+struct LinCombTopKSoftmaxCol
+    : LinearCombination<ElementOutput_, ElementCompute_, ElementSource_, ElementScalar_, RoundStyle_> {
+};
+
 
 // D = alpha * acc + beta * C + per-row bias
 template<
@@ -130,7 +149,7 @@ template<
   class ElementBias_ = ElementOutput_,
   class ElementSource_ = ElementOutput_,
   class ElementScalar_ = ElementCompute_,
-  int AlignmentBias_ = 128 / sizeof_bits_v<ElementBias_>,
+  int AlignmentBias_ = 128 / cute::sizeof_bits_v<ElementBias_>,
   FloatRoundStyle RoundStyle_ = FloatRoundStyle::round_to_nearest
 >
 struct LinCombPerRowBias
@@ -138,6 +157,23 @@ struct LinCombPerRowBias
   using ElementBias = ElementBias_;
   static constexpr int AlignmentBias = AlignmentBias_;
   static constexpr bool IsPerRowBiasSupported = true;
+};
+
+// D = alpha * acc + beta * C + per-column bias
+template<
+  class ElementOutput_,
+  class ElementCompute_,
+  class ElementBias_ = ElementOutput_,
+  class ElementSource_ = ElementOutput_,
+  class ElementScalar_ = ElementCompute_,
+  int AlignmentBias_ = 128 / cute::sizeof_bits_v<ElementBias_>,
+  FloatRoundStyle RoundStyle_ = FloatRoundStyle::round_to_nearest
+>
+struct LinCombPerColBias
+    : LinearCombination<ElementOutput_, ElementCompute_, ElementSource_, ElementScalar_, RoundStyle_> {
+  using ElementBias = ElementBias_;
+  static constexpr int AlignmentBias = AlignmentBias_;
+  static constexpr bool IsPerColBiasSupported = true;
 };
 
 // D = activation(alpha * acc + beta * C + per-row bias)
@@ -148,11 +184,29 @@ template<
   class ElementBias_ = ElementOutput_,
   class ElementSource_ = ElementOutput_,
   class ElementScalar_ = ElementCompute_,
-  int AlignmentBias_ = 128 / sizeof_bits_v<ElementBias_>,
+  int AlignmentBias_ = 128 / cute::sizeof_bits_v<ElementBias_>,
   FloatRoundStyle RoundStyle_ = FloatRoundStyle::round_to_nearest
 >
 struct LinCombPerRowBiasEltAct
     : LinCombPerRowBias<ElementOutput_, ElementCompute_,
+        ElementBias_, ElementSource_, ElementScalar_, AlignmentBias_, RoundStyle_> {
+  using ActivationFn = ActivationFn_<ElementCompute_>;
+  static constexpr bool IsEltActSupported = true;
+};
+
+// D = activation(alpha * acc + beta * C + per-column bias)
+template<
+  template <class> class ActivationFn_,
+  class ElementOutput_,
+  class ElementCompute_,
+  class ElementBias_ = ElementOutput_,
+  class ElementSource_ = ElementOutput_,
+  class ElementScalar_ = ElementCompute_,
+  int AlignmentBias_ = 128 / cute::sizeof_bits_v<ElementBias_>,
+  FloatRoundStyle RoundStyle_ = FloatRoundStyle::round_to_nearest
+>
+struct LinCombPerColBiasEltAct
+    : LinCombPerColBias<ElementOutput_, ElementCompute_,
         ElementBias_, ElementSource_, ElementScalar_, AlignmentBias_, RoundStyle_> {
   using ActivationFn = ActivationFn_<ElementCompute_>;
   static constexpr bool IsEltActSupported = true;
@@ -169,12 +223,36 @@ template<
   class ElementBias_ = ElementOutput_,
   class ElementSource_ = ElementOutput_,
   class ElementScalar_ = ElementCompute_,
-  int AlignmentAux_ = 128 / sizeof_bits_v<ElementAux_>,
-  int AlignmentBias_ = 128 / sizeof_bits_v<ElementBias_>,
+  int AlignmentAux_ = 128 / cute::sizeof_bits_v<ElementAux_>,
+  int AlignmentBias_ = 128 / cute::sizeof_bits_v<ElementBias_>,
   FloatRoundStyle RoundStyle_ = FloatRoundStyle::round_to_nearest
 >
 struct LinCombPerRowBiasEltActAux
     : LinCombPerRowBiasEltAct<ActivationFn_, ElementOutput_, ElementCompute_,
+        ElementBias_, ElementSource_, ElementScalar_, AlignmentBias_, RoundStyle_> {
+  using ElementAux = ElementAux_;
+  using GmemLayoutTagAux = GmemLayoutTagAux_;
+  static constexpr int AlignmentAux = AlignmentAux_;
+  static constexpr bool IsAuxOutSupported = true;
+};
+
+// D = activation(alpha * acc + beta * C + per-col bias)
+// aux = alpha * acc + beta * C + per-col bias
+template<
+  class GmemLayoutTagAux_,
+  template <class> class ActivationFn_,
+  class ElementOutput_,
+  class ElementCompute_,
+  class ElementAux_ = ElementOutput_,
+  class ElementBias_ = ElementOutput_,
+  class ElementSource_ = ElementOutput_,
+  class ElementScalar_ = ElementCompute_,
+  int AlignmentAux_ = 128 / cute::sizeof_bits_v<ElementAux_>,
+  int AlignmentBias_ = 128 / cute::sizeof_bits_v<ElementBias_>,
+  FloatRoundStyle RoundStyle_ = FloatRoundStyle::round_to_nearest
+>
+struct LinCombPerColBiasEltActAux
+    : LinCombPerColBiasEltAct<ActivationFn_, ElementOutput_, ElementCompute_,
         ElementBias_, ElementSource_, ElementScalar_, AlignmentBias_, RoundStyle_> {
   using ElementAux = ElementAux_;
   using GmemLayoutTagAux = GmemLayoutTagAux_;
@@ -190,8 +268,8 @@ template<
   class ElementBias_ = ElementOutput_,
   class ElementSource_ = ElementOutput_,
   class ElementScalar_ = ElementCompute_, // per-row alpha/beta
-  int AlignmentBias_ = 128 / sizeof_bits_v<ElementBias_>,
-  int AlignmentScalar_ = 128 / sizeof_bits_v<ElementScalar_>,
+  int AlignmentBias_ = 128 / cute::sizeof_bits_v<ElementBias_>,
+  int AlignmentScalar_ = 128 / cute::sizeof_bits_v<ElementScalar_>,
   FloatRoundStyle RoundStyle_ = FloatRoundStyle::round_to_nearest
 >
 struct PerRowLinCombPerRowBiasEltAct
@@ -199,6 +277,46 @@ struct PerRowLinCombPerRowBiasEltAct
         ElementBias_, ElementSource_, ElementScalar_, AlignmentBias_, RoundStyle_> {
   static constexpr int AlignmentScalar = AlignmentScalar_;
   static constexpr bool IsPerRowScaleSupported = true;
+};
+
+// D = per-column alpha * per-row alpha * acc + beta * C
+template<
+  class ElementOutput_,
+  class ElementCompute_,
+  class ElementSource_ = ElementCompute_,
+  class ElementScalar_ = ElementCompute_,
+  int AlignmentScalar_ = 128 / cute::sizeof_bits_v<ElementScalar_>,
+  FloatRoundStyle RoundStyle_ = FloatRoundStyle::round_to_nearest
+>
+struct OuterProdLinComb : FusionOperation {
+  using ElementOutput = ElementOutput_;
+  using ElementCompute = ElementCompute_;
+  using ElementSource = ElementSource_;
+  using ElementScalar = ElementScalar_;
+  static constexpr int AlignmentScalar = AlignmentScalar_;
+  static constexpr auto RoundStyle = RoundStyle_;
+  static constexpr bool IsSourceSupported = true;
+  static constexpr bool IsPerRowScaleSupported = true;
+  static constexpr bool IsPerColScaleSupported = true;
+};
+
+// D = activation(per-col alpha * acc + per-col beta * C + per-column bias)
+template<
+  template <class> class ActivationFn_,
+  class ElementOutput_,
+  class ElementCompute_,
+  class ElementBias_ = ElementOutput_,
+  class ElementSource_ = ElementOutput_,
+  class ElementScalar_ = ElementCompute_, // per-row alpha/beta
+  int AlignmentBias_ = 128 / cute::sizeof_bits_v<ElementBias_>,
+  int AlignmentScalar_ = 128 / cute::sizeof_bits_v<ElementScalar_>,
+  FloatRoundStyle RoundStyle_ = FloatRoundStyle::round_to_nearest
+>
+struct PerColLinCombPerColBiasEltAct
+    : LinCombPerColBiasEltAct<ActivationFn_, ElementOutput_, ElementCompute_,
+        ElementBias_, ElementSource_, ElementScalar_, AlignmentBias_, RoundStyle_> {
+  static constexpr int AlignmentScalar = AlignmentScalar_;
+  static constexpr bool IsPerColScaleSupported = true;
 };
 
 // Z = scale_a * scale_b * alpha * acc + beta * scale_c * C + per-row bias
@@ -213,11 +331,32 @@ template<
   class ElementBias_ = ElementOutput_,
   class ElementSource_ = ElementOutput_,
   class ElementScalar_ = ElementCompute_,
-  int AlignmentBias_ = 128 / sizeof_bits_v<ElementBias_>,
+  int AlignmentBias_ = 128 / cute::sizeof_bits_v<ElementBias_>,
   FloatRoundStyle RoundStyle_ = FloatRoundStyle::round_to_nearest
 >
 struct ScaledLinCombPerRowBiasEltAct
     : LinCombPerRowBiasEltAct<ActivationFn_, ElementOutput_, ElementCompute_,
+        ElementBias_, ElementSource_, ElementScalar_, AlignmentBias_, RoundStyle_> {
+  static constexpr bool IsScaleFactorSupported = true;
+};
+
+// Z = scale_a * scale_b * alpha * acc + beta * scale_c * C + per-col bias
+// if D is fp8 
+//   D = scale_d * activation(Z)
+// else
+//   D = activation(Z)
+template<
+  template <class> class ActivationFn_,
+  class ElementOutput_,
+  class ElementCompute_,
+  class ElementBias_ = ElementOutput_,
+  class ElementSource_ = ElementOutput_,
+  class ElementScalar_ = ElementCompute_,
+  int AlignmentBias_ = 128 / cute::sizeof_bits_v<ElementBias_>,
+  FloatRoundStyle RoundStyle_ = FloatRoundStyle::round_to_nearest
+>
+struct ScaledLinCombPerColBiasEltAct
+    : LinCombPerColBiasEltAct<ActivationFn_, ElementOutput_, ElementCompute_,
         ElementBias_, ElementSource_, ElementScalar_, AlignmentBias_, RoundStyle_> {
   static constexpr bool IsScaleFactorSupported = true;
 };
@@ -243,12 +382,49 @@ template<
   class ElementBias_ = ElementOutput_,
   class ElementSource_ = ElementOutput_,
   class ElementScalar_ = ElementCompute_,
-  int AlignmentAux_ = 128 / sizeof_bits_v<ElementAux_>,
-  int AlignmentBias_ = 128 / sizeof_bits_v<ElementBias_>,
+  int AlignmentAux_ = 128 / cute::sizeof_bits_v<ElementAux_>,
+  int AlignmentBias_ = 128 / cute::sizeof_bits_v<ElementBias_>,
   FloatRoundStyle RoundStyle_ = FloatRoundStyle::round_to_nearest
 >
 struct ScaledLinCombPerRowBiasEltActAmaxAux
     : ScaledLinCombPerRowBiasEltAct<ActivationFn_, ElementOutput_, ElementCompute_,
+        ElementBias_, ElementSource_, ElementScalar_, AlignmentBias_, RoundStyle_> {
+  using ElementAmax = ElementAmax_;
+  static constexpr bool IsAbsMaxSupported = true;
+
+  using ElementAux = ElementAux_;
+  using GmemLayoutTagAux = GmemLayoutTagAux_;
+  static constexpr int AlignmentAux = AlignmentAux_;
+  static constexpr bool IsAuxOutSupported = true;
+};
+
+// Z = scale_a * scale_b * alpha * acc + scale_c * beta * C + per-col bias
+// if D is fp8 
+//   amax_d = max(abs(elements in activation(Z)))
+//   D = scale_d * activation(Z)
+// else
+//   D = activation(Z)
+// if Aux is fp8 
+//   amax_aux = max(abs(elements in Z))
+//   Aux = scale_aux * Z
+// else
+//   Aux = Z
+template<
+  class GmemLayoutTagAux_,
+  template <class> class ActivationFn_,
+  class ElementOutput_,
+  class ElementCompute_,
+  class ElementAux_ = ElementOutput_,
+  class ElementAmax_ = ElementCompute_,
+  class ElementBias_ = ElementOutput_,
+  class ElementSource_ = ElementOutput_,
+  class ElementScalar_ = ElementCompute_,
+  int AlignmentAux_ = 128 / cute::sizeof_bits_v<ElementAux_>,
+  int AlignmentBias_ = 128 / cute::sizeof_bits_v<ElementBias_>,
+  FloatRoundStyle RoundStyle_ = FloatRoundStyle::round_to_nearest
+>
+struct ScaledLinCombPerColBiasEltActAmaxAux
+    : ScaledLinCombPerColBiasEltAct<ActivationFn_, ElementOutput_, ElementCompute_,
         ElementBias_, ElementSource_, ElementScalar_, AlignmentBias_, RoundStyle_> {
   using ElementAmax = ElementAmax_;
   static constexpr bool IsAbsMaxSupported = true;
@@ -270,7 +446,7 @@ template<
   class ElementAux_ = ElementOutput_,
   class ElementSource_ = ElementOutput_,
   class ElementScalar_ = ElementCompute_,
-  int AlignmentAux_ = 128 / sizeof_bits_v<ElementAux_>,
+  int AlignmentAux_ = 128 / cute::sizeof_bits_v<ElementAux_>,
   FloatRoundStyle RoundStyle_ = FloatRoundStyle::round_to_nearest
 >
 struct LinCombDeEltAct
@@ -297,8 +473,8 @@ template<
   class ElementBias_ = ElementCompute_,
   class ElementSource_ = ElementOutput_,
   class ElementScalar_ = ElementCompute_,
-  int AlignmentAux_ = 128 / sizeof_bits_v<ElementAux_>,
-  int AlignmentBias_ = 128 / sizeof_bits_v<ElementBias_>,
+  int AlignmentAux_ = 128 / cute::sizeof_bits_v<ElementAux_>,
+  int AlignmentBias_ = 128 / cute::sizeof_bits_v<ElementBias_>,
   FloatRoundStyle RoundStyle_ = FloatRoundStyle::round_to_nearest
 >
 struct LinCombDeEltActDePerRowBias

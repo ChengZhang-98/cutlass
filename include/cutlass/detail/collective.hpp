@@ -31,7 +31,7 @@
 #pragma once
 
 #include "cute/container/tuple.hpp"
-
+#include "cute/layout.hpp" // cute::size(shape)
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
 namespace cutlass::gemm::collective {

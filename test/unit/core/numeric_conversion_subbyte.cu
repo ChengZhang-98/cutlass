@@ -28,77 +28,42 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  **************************************************************************************************/
+/*! \file
+    \brief Unit tests for conversion operators.
+*/
 
-#include "cutlass_unit_test.h"
+#include "../common/cutlass_unit_test.h"
 
-#include <iostream>
-#include <iomanip>
-#include <utility>
-#include <type_traits>
-#include <vector>
-#include <numeric>
+#include "cutlass/numeric_conversion.h"
+#include "cutlass/integer_subbyte.h"
 
-#include <thrust/host_vector.h>
-#include <thrust/device_vector.h>
+namespace test::core::host {
 
-#include <cute/tensor.hpp>
+template <class DstValueType, class SrcValueType, int NumElements>
+void run_test() {
+  cutlass::Array<DstValueType, NumElements> dst;
+  dst.clear();
 
-using namespace cute;
-
-__global__ void
-test(double const* g_in, double* g_out)
-{
-  extern __shared__ double smem[];
-
-  smem[threadIdx.x] = g_in[threadIdx.x];
-
-  __syncthreads();
-
-  g_out[threadIdx.x] = 2 * smem[threadIdx.x];
-}
-
-__global__ void
-test2(double const* g_in, double* g_out)
-{
-  using namespace cute;
-
-  extern __shared__ double smem[];
-
-  auto s_tensor = make_tensor(make_smem_ptr(smem + threadIdx.x), Int<1>{});
-  auto g_tensor = make_tensor(make_gmem_ptr(g_in + threadIdx.x), Int<1>{});
-
-  copy(g_tensor, s_tensor);
-
-  cp_async_fence();
-  cp_async_wait<0>();
-  __syncthreads();
-
-  g_out[threadIdx.x] = 2 * smem[threadIdx.x];
-}
-
-TEST(SM80_CuTe_Ampere, CpAsync)
-{
-  constexpr int count = 32;
-  thrust::host_vector<double> h_in(count);
-  for (int i = 0; i < count; ++i) {
-    h_in[i] = double(i);
+  cutlass::Array<SrcValueType, NumElements> src;
+  for (int k = 0; k < NumElements; ++k) {
+    src[k] = SrcValueType(k+1);
   }
 
-  thrust::device_vector<double> d_in(h_in);
+  cutlass::NumericArrayConverter<DstValueType, SrcValueType, NumElements> converter;
+  dst = converter(src);
 
-  thrust::device_vector<double> d_out(count, -1);
-  test<<<1, count, sizeof(double) * count>>>(
-    thrust::raw_pointer_cast(d_in.data()),
-    thrust::raw_pointer_cast(d_out.data()));
-  thrust::host_vector<double> h_result = d_out;
-
-  thrust::device_vector<double> d_out_cp_async(count, -2);
-  test2<<<1, count, sizeof(double) * count>>>(
-    thrust::raw_pointer_cast(d_in.data()),
-    thrust::raw_pointer_cast(d_out_cp_async.data()));
-  thrust::host_vector<double> h_result_cp_async = d_out_cp_async;
-
-  for (int i = 0; i < count; ++i) {
-    EXPECT_EQ(h_result[i], h_result_cp_async[i]);
+  for (int k = 0; k < NumElements; ++k) {
+    EXPECT_TRUE(static_cast<int>(src[k]) == static_cast<int>(dst[k]));
   }
 }
+
+} // namespace test::core::host
+
+TEST(NumericArrayConversion, Subbyte_int8_int8) {
+  test::core::host::run_test<int8_t, int8_t, 8>();
+}
+
+TEST(NumericArrayConversion, Subbyte_int8_int4) {
+  test::core::host::run_test<int8_t, cutlass::int4b_t, 8>();
+}
+

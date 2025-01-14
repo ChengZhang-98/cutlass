@@ -192,7 +192,12 @@ public:
     void const *arguments,
     void *host_workspace,
     void *device_workspace = nullptr,
-    cudaStream_t stream = nullptr) const {
+    cudaStream_t stream = nullptr,
+    bool launch_with_pdl = false) const {
+
+    if (launch_with_pdl) {
+      return Status::kErrorNotSupported;
+    }
 
     GemmUniversalConfiguration const &config = *static_cast<GemmUniversalConfiguration const *>(host_workspace);
     GemmUniversalArguments const &args = *static_cast<GemmUniversalArguments const *>(arguments);
@@ -293,7 +298,7 @@ template <
   typename InnerProductOp_ = multiply_add<ElementAccumulator_>
 >
 void make_gemm(Manifest &manifest) {
-  
+#if !defined(CUTLASS_PROFILER_DISABLE_REFERENCE)
   manifest.append(new GemmReferenceOperation<
     Provider::kReferenceHost,
     ElementA_, LayoutA_, TransformA,
@@ -317,6 +322,7 @@ void make_gemm(Manifest &manifest) {
     ConvertOp_,
     InnerProductOp_
   >);
+#endif
 }
 
 /// Helper to create NN, NT, TN, and TT GEMM layouts.

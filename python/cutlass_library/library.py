@@ -69,11 +69,13 @@ GeneratorTargetNames = {
 class DataType(enum.Enum):
   void = enum_auto()  # primarily used to disable C tensor for epilogues
   b1 = enum_auto()
+  u2 = enum_auto()
   u4 = enum_auto()
   u8 = enum_auto()
   u16 = enum_auto()
   u32 = enum_auto()
   u64 = enum_auto()
+  s2 = enum_auto()
   s4 = enum_auto()
   s8 = enum_auto()
   s16 = enum_auto()
@@ -91,11 +93,13 @@ class DataType(enum.Enum):
   cf32 = enum_auto()
   ctf32 = enum_auto()
   cf64 = enum_auto()
+  cs2 = enum_auto()
   cs4 = enum_auto()
   cs8 = enum_auto()
   cs16 = enum_auto()
   cs32 = enum_auto()
   cs64 = enum_auto()
+  cu2 = enum_auto()
   cu4 = enum_auto()
   cu8 = enum_auto()
   cu16 = enum_auto()
@@ -119,11 +123,13 @@ ShortDataTypeNames = {
 DataTypeNames = {
   DataType.void: "void",
   DataType.b1: "b1",
+  DataType.u2: "u2",
   DataType.u4: "u4",
   DataType.u8: "u8",
   DataType.u16: "u16",
   DataType.u32: "u32",
   DataType.u64: "u64",
+  DataType.s2: "s2",
   DataType.s4: "s4",
   DataType.s8: "s8",
   DataType.s16: "s16",
@@ -141,11 +147,13 @@ DataTypeNames = {
   DataType.cf32: "cf32",
   DataType.ctf32: "ctf32",
   DataType.cf64: "cf64",
+  DataType.cu2: "cu2",
   DataType.cu4: "cu4",
   DataType.cu8: "cu8",
   DataType.cu16: "cu16",
   DataType.cu32: "cu32",
   DataType.cu64: "cu64",
+  DataType.cs2: "cs2",
   DataType.cs4: "cs4",
   DataType.cs8: "cs8",
   DataType.cs16: "cs16",
@@ -156,11 +164,13 @@ DataTypeNames = {
 DataTypeTag = {
   DataType.void: "void",
   DataType.b1: "cutlass::uint1b_t",
+  DataType.u2: "cutlass::uint2b_t",
   DataType.u4: "cutlass::uint4b_t",
   DataType.u8: "uint8_t",
   DataType.u16: "uint16_t",
   DataType.u32: "uint32_t",
   DataType.u64: "uint64_t",
+  DataType.s2: "cutlass::int2b_t",
   DataType.s4: "cutlass::int4b_t",
   DataType.s8: "int8_t",
   DataType.s16: "int16_t",
@@ -178,11 +188,13 @@ DataTypeTag = {
   DataType.cf32: "cutlass::complex<float>",
   DataType.ctf32: "cutlass::complex<cutlass::tfloat32_t>",
   DataType.cf64: "cutlass::complex<double>",
+  DataType.cu2: "cutlass::complex<cutlass::uint2b_t>",
   DataType.cu4: "cutlass::complex<cutlass::uint4b_t>",
   DataType.cu8: "cutlass::complex<cutlass::uint8_t>",
   DataType.cu16: "cutlass::complex<cutlass::uint16_t>",
   DataType.cu32: "cutlass::complex<cutlass::uint32_t>",
   DataType.cu64: "cutlass::complex<cutlass::uint64_t>",
+  DataType.cs2: "cutlass::complex<cutlass::int2b_t>",
   DataType.cs4: "cutlass::complex<cutlass::int4b_t>",
   DataType.cs8: "cutlass::complex<cutlass::int8_t>",
   DataType.cs16: "cutlass::complex<cutlass::int16_t>",
@@ -193,11 +205,13 @@ DataTypeTag = {
 DataTypeSize = {
   DataType.void: 0,
   DataType.b1: 1,
+  DataType.u2: 2,
   DataType.u4: 4,
   DataType.u8: 8,
   DataType.u16: 16,
   DataType.u32: 32,
   DataType.u64: 64,
+  DataType.s2: 2,
   DataType.s4: 4,
   DataType.s8: 8,
   DataType.s16: 16,
@@ -215,11 +229,13 @@ DataTypeSize = {
   DataType.cf32: 64,
   DataType.ctf32: 32,
   DataType.cf64: 128,
+  DataType.cu2: 4,
   DataType.cu4: 8,
   DataType.cu8: 16,
   DataType.cu16: 32,
   DataType.cu32: 64,
   DataType.cu64: 128,
+  DataType.cs2: 4,
   DataType.cs4: 8,
   DataType.cs8: 16,
   DataType.cs16: 32,
@@ -584,12 +600,14 @@ OpcodeClassNames = {
   OpcodeClass.Simt: 'simt',
   OpcodeClass.TensorOp: 'tensorop',
   OpcodeClass.WmmaTensorOp: 'wmma_tensorop',
+  OpcodeClass.SparseTensorOp: 'sptensorop',
 }
 
 OpcodeClassTag = {
   OpcodeClass.Simt: 'cutlass::arch::OpClassSimt',
   OpcodeClass.TensorOp: 'cutlass::arch::OpClassTensorOp',
   OpcodeClass.WmmaTensorOp: 'cutlass::arch::OpClassWmmaTensorOp',
+  OpcodeClass.SparseTensorOp: 'cutlass::arch::OpClassSparseTensorOp',
 }
 
 ###################################################################################################

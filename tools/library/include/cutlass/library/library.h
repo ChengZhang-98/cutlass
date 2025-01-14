@@ -103,11 +103,22 @@ public:
     void *device_workspace = nullptr,
     cudaStream_t stream = nullptr) const = 0;
 
+  virtual Status initialize_with_profiler_workspace(
+    void const *configuration,
+    void *host_workspace,
+    void *device_workspace,
+    uint8_t **profiler_workspace_ptrs,
+    int problem_count,
+    cudaStream_t stream = nullptr) {
+    return Status::kErrorNotSupported;
+  }
+
   virtual Status run(
     void const *arguments,
     void *host_workspace,
     void *device_workspace = nullptr,
-    cudaStream_t stream = nullptr) const = 0;
+    cudaStream_t stream = nullptr,
+    bool launch_with_pdl = false) const = 0;
 
 };
 
@@ -261,6 +272,8 @@ struct GemmUniversalConfiguration {
   int64_t ldb{0};
   int64_t ldc{0};
   int64_t ldd{0};
+
+  int device_count{1};
 };
 
 struct GemmUniversalArguments {
@@ -290,8 +303,10 @@ struct GemmUniversalArguments {
 
   // Needed for some 3.x kernels
   int sm_count{0};
-
   library::RasterOrder raster_order{};
+  int swizzle_size{1};
+
+  int device_index{0};
 };
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
