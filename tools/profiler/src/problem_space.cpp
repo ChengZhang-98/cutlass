@@ -879,6 +879,32 @@ bool arg_as_NumericTypeID(
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
+
+/// Lexically casts an argument to an int64 if it is defined. Returns true if not null.
+bool arg_as_RuntimeDatatype(
+  library::RuntimeDatatype &runtime_datatype, 
+  KernelArgument::Value const *value_ptr) {
+  
+  if (value_ptr->not_null) {
+    if (value_ptr->argument->description->type == ArgumentTypeID::kEnumerated) {
+      
+      runtime_datatype = library::from_string<library::RuntimeDatatype>(
+        static_cast<EnumeratedTypeArgument::EnumeratedTypeValue const *>(value_ptr)->element);
+      if (runtime_datatype == library::RuntimeDatatype::kInvalid) {
+        throw std::runtime_error(
+          "arg_as_RuntimeDatatype() - illegal cast.");
+      }
+    }
+    else {
+      throw std::runtime_error(
+        "arg_as_RuntimeDatatype() - illegal cast.");
+    }
+    return true;
+  }
+  return false;
+}
+
+
 /// Lexically casts an argument to an int64 if it is defined. Returns true if not null.
 bool arg_as_RasterOrder(
   library::RasterOrder &raster_order, 
@@ -944,6 +970,21 @@ bool arg_as_LayoutTypeID(
   }
   return false;
 }
+
+
+/// Lexically casts an argument to an int64 if it is defined. Returns true if not null.
+bool arg_as_RuntimeDatatype(
+  library::RuntimeDatatype &runtime_datatype,
+  char const *name,
+  ProblemSpace const &problem_space, 
+  ProblemSpace::Problem const &problem) {
+
+  size_t idx = problem_space.argument_index(name);
+  KernelArgument::Value const *value_ptr = problem.at(idx).get();
+
+  return arg_as_RuntimeDatatype(runtime_datatype, value_ptr);
+}
+
 
 /// Lexically casts an argument to an int64 if it is defined. Returns true if not null.
 bool arg_as_LayoutTypeID(
@@ -1160,6 +1201,34 @@ bool arg_as_scalar(
   KernelArgument::Value const *value_ptr = problem.at(idx).get();
 
   return arg_as_scalar(bytes, numeric_type, value_ptr);
+}
+
+/// Returns a copy of the string passed to the argument.
+/// (kScalar arguments are stored as strings).
+bool arg_as_string(
+  std::string& arg,
+  char const* name,
+  ProblemSpace const& problem_space,
+  ProblemSpace::Problem const& problem) {
+
+  size_t idx = problem_space.argument_index(name);
+  KernelArgument::Value const* value_ptr = problem.at(idx).get();
+
+  if (value_ptr->not_null) {
+    if (value_ptr->argument->description->type == ArgumentTypeID::kScalar) {
+      std::string const& str_value =
+        static_cast<ScalarArgument::ScalarValue const*>(value_ptr)->value;
+      arg = std::string(str_value);
+    }
+    else {
+      throw std::runtime_error(
+        "arg_as_string() - illegal cast. Problem space argument must be scalar");
+    }
+
+    return true;
+  }
+
+  return false;
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////

@@ -1200,26 +1200,42 @@ public:
   GemmGroupedOperation(char const *name = "unknown_gemm"):
     GemmOperationBase<Operator_>(name) {
 
-    this->description_.gemm_kind = GemmKind::kGrouped;
+    this->description_.kind = OperationKind::kGroupedGemm;
+    this->description_.provider = Provider::kCUTLASS;
+    this->threadblock_count = Operator::sufficient();
+
+    this->description_.gemm = GemmOperationBase<Operator_>::description_;
+    this->description_.gemm.gemm_kind = GemmKind::kGrouped;
+    this->description_.tile_description = this->description_.gemm.tile_description;
   }
+
+  /// Returns the description of the GroupedGEMM operation
+  virtual OperationDescription const & description() const override final {
+    return description_;
+  }
+
+
+private:
+  int threadblock_count;
+  GroupedGemmDescription description_;
 
 protected:
 
   /// Constructs the arguments structure given the configuration and arguments
-  static Status construct_arguments_(
+  Status construct_arguments_(
     OperatorArguments &op_args,
-    GemmGroupedConfiguration const *config) {
+    GemmGroupedConfiguration const *config) const {
 
     op_args.problem_count = config->problem_count;
-    op_args.threadblock_count = config->threadblock_count;
+    op_args.threadblock_count = threadblock_count;
 
     return Status::kSuccess;
   }
 
   /// Constructs the arguments structure given the configuration and arguments
-  static Status update_arguments_(
+  Status update_arguments_(
     OperatorArguments &op_args,
-    GemmGroupedArguments const *arguments) {
+    GemmGroupedArguments const *arguments) const {
 
     if (arguments->pointer_mode == ScalarPointerMode::kHost) {
 
@@ -1243,6 +1259,8 @@ protected:
       return Status::kErrorInvalidProblem;
     }
 
+    op_args.threadblock_count = threadblock_count;
+    op_args.problem_count = arguments->problem_count;
     op_args.problem_sizes = arguments->problem_sizes;
 
     op_args.ptr_A         = static_cast<ElementA **>(arguments->ptr_A);

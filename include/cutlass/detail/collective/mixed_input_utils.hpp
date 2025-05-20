@@ -69,7 +69,7 @@ struct LayoutAwareConvertImpl {
     auto&& src_vm = cute::recast<SrcArray>(src);
     auto&& dst_vm = cute::recast<DstArray>(dst);
     CUTLASS_PRAGMA_UNROLL
-    for (int i = 0; i <src.size(); ++i) {
+    for (int i = 0; i < src_vm.size(); ++i) {
       dst_vm(i) = Converter::convert(src_vm(i));
     }
   }
@@ -237,7 +237,7 @@ struct LayoutAwareConvertImpl<
   }
 };
 
-// Specialization for UINT4 -> FPF16 with [02461357] value order
+// Specialization for UINT4 -> FP16 with [02461357] value order
 template <>
 struct LayoutAwareConvertImpl<
   cutlass::uint4b_t,
@@ -301,7 +301,7 @@ struct LayoutAwareConvertImpl<
     }
   }
 };
-
+/*
 // Specialization for E5M2 -> FP16 with [3120] value order
 template <>
 struct LayoutAwareConvertImpl<
@@ -343,12 +343,12 @@ struct LayoutAwareConvertImpl<
     }
   }
 };
-
+*/
 // Specialization for INT8 -> BF16 with [3120] value order
 template <>
 struct LayoutAwareConvertImpl<
   cutlass::int8_t,
-  cutlass::half_t,
+  cutlass::bfloat16_t,
   cute::Layout<cute::Shape<_2,_2>, cute::Stride<_2,_1>>,
   cute::Layout<_4>
 > {
@@ -363,9 +363,9 @@ struct LayoutAwareConvertImpl<
                 >& dst) {
 
     static_assert(cute::is_same_v<cutlass::int8_t, typename EngineIn::value_type> &&
-                  cute::is_same_v<cutlass::half_t, typename EngineOut::value_type>);
+                  cute::is_same_v<cutlass::bfloat16_t, typename EngineOut::value_type>);
     using SrcArray = cutlass::Array<cutlass::int8_t, 8>;
-    using DstArray = cutlass::Array<cutlass::half_t, 8>;
+    using DstArray = cutlass::Array<cutlass::bfloat16_t, 8>;
     using RegArray = cutlass::AlignedArray<uint32_t, 4, sizeof(DstArray)>;
 
     auto&& src_reg = cute::recast<uint32_t>(src)(0);
@@ -403,7 +403,7 @@ struct LayoutAwareConvertImpl<
 template <>
 struct LayoutAwareConvertImpl<
   cutlass::int8_t,
-  cutlass::bfloat16_t,
+  cutlass::half_t,
   cute::Layout<cute::Shape<_2,_2>, cute::Stride<_2,_1>>,
   cute::Layout<_4>
 > {
@@ -418,9 +418,9 @@ struct LayoutAwareConvertImpl<
                 >& dst) {
 
     static_assert(cute::is_same_v<cutlass::int8_t, typename EngineIn::value_type> &&
-                  cute::is_same_v<cutlass::bfloat16_t, typename EngineOut::value_type>);
+                  cute::is_same_v<cutlass::half_t, typename EngineOut::value_type>);
     using SrcArray = cutlass::Array<cutlass::int8_t, 8>;
-    using DstArray = cutlass::Array<cutlass::bfloat16_t, 8>;
+    using DstArray = cutlass::Array<cutlass::half_t, 8>;
     using RegArray = cutlass::AlignedArray<uint32_t, 4, sizeof(DstArray)>;
 
     auto&& src_reg = cute::recast<uint32_t>(src)(0);
@@ -804,14 +804,15 @@ public:
         {
           auto&& scale_neg_ = reinterpret_cast<cutlass::Array<uint32_t, 2> const&>(scales_neg_vm_(i));
           auto&& scale_pos_ = reinterpret_cast<cutlass::Array<uint32_t, 2>      &>(scales_pos_vm_(i));
+          constexpr uint32_t immLut = (0xf0 & 0xcc) ^ 0xaa;
           asm volatile(
               "{\n"
-              "  and  .b32 %0, %2, %4             ;\n" \
-              "  and  .b32 %1, %3, %5             ;\n" \
+              "  lop3 .b32 %0, %2, %4, %5, %6;\n" \
+              "  xor  .b32 %1, %3, %5;        \n" \
               "}\n"
               : "=r"(scale_pos_[0]), "=r"(scale_pos_[1])
-              : "r"(scale_neg_[0]), "r"(scale_neg_[1]), "n"(0x7F7F7F00), "n"(0x7F7F7F7F)
-              );
+              : "r"(scale_neg_[0]), "r"(scale_neg_[1]), "n"(0xFFFFFF00), "n"(0x80808080), "n"(immLut)
+            );
         }
       }
       CUTLASS_PRAGMA_UNROLL

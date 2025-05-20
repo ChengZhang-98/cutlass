@@ -102,6 +102,8 @@ set(CMAKE_CUDA_STANDARD_REQUIRED ON)
 
 list(APPEND CUTLASS_CUDA_NVCC_FLAGS --expt-relaxed-constexpr)
 
+list(APPEND CUTLASS_CUDA_NVCC_FLAGS -ftemplate-backtrace-limit=0)
+
 if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
   set(CMAKE_INSTALL_PREFIX install CACHE PATH "Default installation location." FORCE)
 endif()
@@ -114,6 +116,13 @@ set(CUTLASS_TEST_LEVEL "0" CACHE STRING "Level of tests to compile.")
 find_package(Python3 3.5 COMPONENTS Interpreter REQUIRED)
 
 ################################################################################
+
+
+include(customConfigs.cmake)
+
+################################################################################
+
+
 set(CUTLASS_ENABLE_HEADERS_ONLY OFF CACHE BOOL "Enable only the header library")
 
 if(CUTLASS_ENABLE_HEADERS_ONLY)
@@ -143,14 +152,14 @@ set(CUTLASS_ENABLE_PERFORMANCE ${CUTLASS_ENABLE_PROFILER} CACHE BOOL "Enable CUT
 set(CUTLASS_ENABLE_TESTS ${CUTLASS_ENABLE_TESTS_INIT} CACHE BOOL "Enable CUTLASS Tests")
 set(CUTLASS_ENABLE_GTEST_UNIT_TESTS ${CUTLASS_ENABLE_TESTS} CACHE BOOL "Enable CUTLASS GTest-based Unit Tests")
 set(CUTLASS_USE_SYSTEM_GOOGLETEST OFF CACHE BOOL "Use system/external installation of GTest")
-set(CUTLASS_USE_PACKED_TUPLE ON CACHE BOOL "If ON, make cute::tuple be new standard-layout tuple type; if OFF, use the original cute::tuple implementation that is _not_ standard-layout.")
-if (CUTLASS_USE_PACKED_TUPLE)
-  list(APPEND CUTLASS_CUDA_NVCC_FLAGS -DCUTE_USE_PACKED_TUPLE=1)
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DCUTLASS_USE_PACKED_TUPLE=1")
-  message(STATUS "Make cute::tuple be the new standard-layout tuple type")
-elseif()
-  message(STATUS "Use the original cute::tuple implementation that is _not_ standard-layout")
+
+if (CUTLASS_ENABLE_TESTS AND CUTLASS_ENABLE_PROFILER)
+  set(CUTLASS_ENABLE_PROFILER_UNIT_TESTS_INIT ON)
+else()
+  set(CUTLASS_ENABLE_PROFILER_UNIT_TESTS_INIT OFF)
 endif()
+set(CUTLASS_ENABLE_PROFILER_UNIT_TESTS ${CUTLASS_ENABLE_PROFILER_UNIT_TESTS_INIT} CACHE BOOL "Enable CUTLASS Profiler-based Unit Tests")
+set(CUTLASS_ENABLE_SELF_CONTAINED_INCLUDES_CHECK ON CACHE BOOL "Enable CUTLASS check for self-contained header includes")
 
 ################################################################################
 
@@ -164,6 +173,15 @@ endif()
 if (CUDA_VERSION VERSION_GREATER_EQUAL 12.0)
   list(APPEND CUTLASS_NVCC_ARCHS_SUPPORTED 90a)
 endif()
+
+if (CUDA_VERSION VERSION_GREATER_EQUAL 12.8)
+  list(APPEND CUTLASS_NVCC_ARCHS_SUPPORTED 100 100a 101 101a 120 120a)
+endif()
+
+if (CUDA_VERSION VERSION_GREATER_EQUAL 12.9)
+  list(APPEND CUTLASS_NVCC_ARCHS_SUPPORTED 100f 101f 120f)
+endif()
+
 set(CUTLASS_NVCC_ARCHS ${CUTLASS_NVCC_ARCHS_SUPPORTED} CACHE STRING "The SM architectures requested.")
 set(CUTLASS_NVCC_ARCHS_ENABLED ${CUTLASS_NVCC_ARCHS} CACHE STRING "The SM architectures to build code for.")
 
@@ -370,7 +388,21 @@ endif()
 
 if (CUTLASS_ENABLE_GDC_FOR_SM90)
   message(STATUS "Grid Dependency Control (GDC) is enabled for SM90 kernels (required for programmatic dependent launches).")
-  list(APPEND CUTLASS_CUDA_NVCC_FLAGS -DCUTLASS_ENABLE_GDC_FOR_SM90=1)
+  list(APPEND CUTLASS_CUDA_FLAGS -DCUTLASS_ENABLE_GDC_FOR_SM90=1)
+endif()
+
+if (NOT DEFINED CUTLASS_ENABLE_GDC_FOR_SM100_DEFAULT)
+  set(CUTLASS_ENABLE_GDC_FOR_SM100_DEFAULT ON)
+endif()
+
+set(CUTLASS_ENABLE_GDC_FOR_SM100
+    ${CUTLASS_ENABLE_GDC_FOR_SM100_DEFAULT}
+    CACHE BOOL
+    "Enables Grid Dependency Control (GDC) for SM100 kernels (required for PDL).")
+
+if (CUTLASS_ENABLE_GDC_FOR_SM100)
+  message(STATUS "Grid Dependency Control (GDC) is enabled for SM100 kernels (required for programmatic dependent launches).")
+  list(APPEND CUTLASS_CUDA_FLAGS -DCUTLASS_ENABLE_GDC_FOR_SM100=1)
 endif()
 
 set(CUTLASS_ENABLE_SYNCLOG OFF CACHE BOOL "Enable synchronization event logging for race condition debugging. WARNING: This redefines __syncthreads() and __syncwarp() in all downstream code!")
@@ -383,9 +415,18 @@ endif()
 
 
 
+
+###################################################################################################
+#
+# Blackwell features
+#
+###################################################################################################
+
+
+
 # Warnings-as-error exceptions and warning suppressions for Clang builds
 if (CUTLASS_CLANG_HOST_COMPILE)
-  
+
   set(FLAGS_TO_ADD
     "-Wno-error=implicit-int-conversion"
     "-Wno-error=pass-failed"
@@ -393,20 +434,20 @@ if (CUTLASS_CLANG_HOST_COMPILE)
     "-Wno-sign-conversion"
     "-Wno-unused-parameter"
   )
-  
+
   foreach(FLAG ${FLAGS_TO_ADD})
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${FLAG}")
     list(APPEND CUTLASS_CUDA_NVCC_FLAGS "${FLAG}")
     list(APPEND CUTLASS_CUDA_CLANG_FLAGS "${FLAG}")
   endforeach()
-  
+
 endif()
 
 if (NOT MSVC AND CUTLASS_NVCC_KEEP)
   # MSVC flow handles caching already, but for other generators we handle it here.
   set(CUTLASS_NVCC_KEEP_DIR ${CMAKE_CURRENT_BINARY_DIR}/tmp CACHE PATH "Location to store NVCC scratch files")
   file(MAKE_DIRECTORY ${CUTLASS_NVCC_KEEP_DIR})
-  list(APPEND CUTLASS_CUDA_NVCC_FLAGS --keep -v) # --keep-dir may not work with nvcc for some directories.
+  list(APPEND CUTLASS_CUDA_NVCC_FLAGS --keep -v -objtemp) # --keep-dir may not work with nvcc for some directories.
   list(APPEND CUTLASS_CUDA_CLANG_FLAGS -save-temps=${CUTLASS_NVCC_KEEP_DIR})
 endif()
 
@@ -431,6 +472,13 @@ endif()
 if(UNIX)
   list(APPEND CUTLASS_CUDA_NVCC_FLAGS -Xcompiler=-Wconversion)
   list(APPEND CUTLASS_CUDA_NVCC_FLAGS -Xcompiler=-fno-strict-aliasing)
+endif()
+
+# Known ctk11.4 issue (fixed later)
+# Also see https://stackoverflow.com/questions/64523302/cuda-missing-return-statement-at-end-of-non-void-function-in-constexpr-if-fun
+if (CUDA_VERSION VERSION_LESS 11.5.0)
+  list(APPEND CUTLASS_CUDA_NVCC_FLAGS -Xcudafe "--diag_suppress=implicit_return_from_non_void_function" )
+  message("CUDA_VERSION check pass ${CUDA_VERSION}")
 endif()
 
 # Don't leak lineinfo in release builds
@@ -465,7 +513,7 @@ if (CUTLASS_CLANG_DEVICE_COMPILE)
 
   link_libraries(nvidia::cudart)
   link_libraries(nvidia::cuda_driver)
-  
+
 endif()
 
 #Report CUDA build flags
@@ -540,7 +588,7 @@ function(cutlass_apply_cuda_gencode_flags TARGET)
       list(APPEND __CMAKE_CUDA_ARCHS ${ARCH}-real)
     endif()
     if(CUTLASS_NVCC_EMBED_PTX AND NOT CUTLASS_CLANG_DEVICE_COMPILE)
-      # If we're using clang for device compilation, the ptx is inserted 
+      # If we're using clang for device compilation, the ptx is inserted
       # via another command line option and the `-virtual` flags will cause an error.
       list(APPEND __CMAKE_CUDA_ARCHS ${ARCH}-virtual)
     endif()
@@ -632,25 +680,6 @@ if (NOT CUTLASS_NAMESPACE STREQUAL "cutlass")
   target_compile_definitions(CUTLASS INTERFACE CUTLASS_NAMESPACE=${CUTLASS_NAMESPACE})
 endif()
 
-if (NOT DEFINED CUTLASS_REVISION)
-
-  find_package(Git QUIET)
-
-  execute_process(
-    COMMAND ${GIT_EXECUTABLE} rev-parse --short HEAD
-    RESULT_VARIABLE CUTLASS_REVISION_RESULT
-    OUTPUT_VARIABLE CUTLASS_REVISION
-    OUTPUT_STRIP_TRAILING_WHITESPACE
-  )
-
-  if (CUTLASS_REVISION_RESULT)
-    message(STATUS "CUTLASS Revision: Unable to detect, Git returned code ${CUTLASS_REVISION_RESULT}.")
-  else()
-    message(STATUS "CUTLASS Revision: ${CUTLASS_REVISION}")
-  endif()
-
-endif()
-
 configure_file(
   ${CMAKE_CURRENT_SOURCE_DIR}/cmake/version_extended.h.in
   ${CMAKE_CURRENT_BINARY_DIR}/include/cutlass/version_extended.h
@@ -669,6 +698,7 @@ target_include_directories(
   CUTLASS
   SYSTEM INTERFACE
   $<BUILD_INTERFACE:${CUDA_TOOLKIT_ROOT_DIR}/include>
+  $<BUILD_INTERFACE:${CUDA_TOOLKIT_ROOT_DIR}/include/cccl>
   )
 
 install(
@@ -901,7 +931,7 @@ function(cutlass_add_executable_tests NAME TARGET)
     if (NOT __DO_NOT_LOWERCASE_TEST_NAME)
       string(TOLOWER "${TESTCASE_NAME}" TESTCASE_NAME)
     endif()
-    
+
     # The following rigmarole is needed to deal with spaces and possible quotes in
     # command line arguments. The options are passed "by reference" as the actual
     # variable names holding the real options. We then expand these in a way that
@@ -958,6 +988,100 @@ function(cutlass_add_executable_tests NAME TARGET)
 
 endfunction()
 
+
+
+function(cutlass_generate_profiler_tests NAME)
+
+  set(options)
+  set(oneValueArgs)
+  set(multiValueArgs DEPENDS DEPENDEES CUTLASS_PROFILER_EXTRA_OPTIONS)
+  cmake_parse_arguments(_ "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
+
+  if (NOT CUTLASS_BUILD_FOR_PROFILER_REGRESSIONS AND NOT CUTLASS_BUILD_FOR_PROFILER_PERFORMANCE_REGRESSIONS)
+    return()
+  endif()
+
+  install(
+    FILES ${CUTLASS_PROFILER_REGRESSION_LIST_FILE}
+    DESTINATION ${CMAKE_INSTALL_INFODIR}/cutlass/
+    RENAME profiler_regressions.csv
+    )
+
+  # Generate cmake test targets for each entry in the testlist csv
+
+  if (NOT EXISTS "${CUTLASS_PROFILER_REGRESSION_LIST_FILE}")
+    message(SEND_ERROR "Profiler unit tests list path is invalid: CUTLASS_PROFILER_REGRESSION_LIST_FILE = ${CUTLASS_PROFILER_REGRESSION_LIST_FILE}")
+  else()
+    message(STATUS "Using ${CUTLASS_PROFILER_REGRESSION_LIST_FILE} to generate profiler-based tests.")
+  endif()
+
+  file(STRINGS ${CUTLASS_PROFILER_REGRESSION_LIST_FILE} TEST_LIST)
+  foreach(TEST IN LISTS TEST_LIST)
+    set(TEMP_TEST ${TEST})
+    if ("${TEST}" MATCHES " *cutlass_profiler.*")
+
+      # Generate a flattened name for the test from the test command line.
+      string(REPLACE "," ";" TEST_NAME_LIST ${TEMP_TEST})
+      string(REGEX REPLACE "\\*" "_" TEST_NAME "${TEMP_TEST}")
+      string(REGEX REPLACE "\\\"\\{\\\"\\\"input_params.*\\{.*\\}\\}\\\"" "" TEST_NAME "${TEST_NAME}")
+      string(REGEX REPLACE "\\\"\\{\\\"\\\"input_params.*\\{.*\\}\\}\\\"" "" TEST "${TEST}")
+      string(REGEX REPLACE "," ";" TEST "${TEST}")
+      string(REGEX MATCHALL "[a-zA-Z0-9_=]+" TEST_NAME "${TEST_NAME}")
+        list(FILTER TEST_NAME EXCLUDE REGEX "cutlass_profiler|mode=trace|providers=cutlass")
+      list(JOIN TEST_NAME "_" TEST_NAME)
+      string(REGEX REPLACE "_verification_required=(true|false)" "" TEST_NAME "${TEST_NAME}")
+      string(REPLACE "_verification_providers=device" "" TEST_NAME "${TEST_NAME}")
+      string(REPLACE "batch_count=" "batch" TEST_NAME "${TEST_NAME}")
+      string(REPLACE "cluster_m=" "" TEST_NAME "${TEST_NAME}")
+      string(REPLACE "_cluster_n=" "x" TEST_NAME "${TEST_NAME}")
+      string(REGEX REPLACE "_cluster_k=[0-9]+" "" TEST_NAME "${TEST_NAME}")
+      string(REPLACE "cluster_m_fallback=" "" TEST_NAME "${TEST_NAME}")
+      string(REPLACE "_cluster_n_fallback=" "x" TEST_NAME "${TEST_NAME}")
+      string(REGEX REPLACE "_cluster_k_fallback=[0-9]+" "" TEST_NAME "${TEST_NAME}")
+      string(REPLACE "runtime_input_datatype_a=" "" TEST_NAME "${TEST_NAME}")
+      string(REPLACE "runtime_input_datatype_b=" "" TEST_NAME "${TEST_NAME}")
+      string(REPLACE "swizzle_size=" "" TEST_NAME "${TEST_NAME}")
+      string(REGEX REPLACE "verification_enabled=(true|false)" "" TEST_NAME "${TEST_NAME}")
+      string(REGEX REPLACE "warmup_iterations=[0-9]+" "" TEST_NAME "${TEST_NAME}")
+      string(REGEX REPLACE "profiling_iterations=[0-9]+" "" TEST_NAME "${TEST_NAME}")
+      string(REGEX REPLACE "sleep_duration=[0-9]+" "" TEST_NAME "${TEST_NAME}")
+      string(REGEX REPLACE "profiling_enabled=(true|false)" "" TEST_NAME "${TEST_NAME}")
+      string(REPLACE "=" "" TEST_NAME "${TEST_NAME}")
+      string(REPLACE "_error_on_no_match" "" TEST_NAME "${TEST_NAME}")
+      string(REPLACE "_error_if_nothing_is_profiled" "" TEST_NAME "${TEST_NAME}")
+      string(REPLACE "kernels" "" TEST_NAME "${TEST_NAME}")
+      string(REPLACE "operation" "" TEST_NAME "${TEST_NAME}")
+
+      if (NOT __DO_NOT_LOWERCASE_TEST_NAME)
+        string(TOLOWER "${TEST_NAME}" TEST_NAME)
+      endif()
+
+      # Munge the test command
+
+      string(REPLACE "cutlass_profiler" "" TEST "${TEST}")
+      set(TEST "${TEST}" ${__CUTLASS_PROFILER_EXTRA_OPTIONS} "--junit-output=${TEST_NAME}")
+      set(TEST_COMMAND_${TEST_NAME} "${TEST}")
+      list(APPEND TEST_COMMAND_VARS ${TEST_NAME})
+    endif()
+
+  endforeach()
+
+  cutlass_add_executable_tests(
+    ${NAME} cutlass_profiler
+    DEPENDS ${__DEPENDS}
+    DEPENDEES ${__DEPENDEES}
+    TEST_COMMAND_OPTIONS ${TEST_COMMAND_VARS}
+    TEST_COMMAND_OPTIONS_PREFIX TEST_COMMAND_
+    DISABLE_EXECUTABLE_INSTALL_RULE
+    # Uncomment the following line when alloc/dealloc tracking
+    # is fixed for all configurations.
+    # TEST_SETS_SUPPORTED tmem_alloc_tracking
+    )
+
+endfunction()
+
+
+
 if (CUTLASS_ENABLE_TOOLS)
   add_subdirectory(tools)
   if (CUTLASS_ENABLE_PROFILER)
@@ -975,6 +1099,14 @@ if (CUTLASS_ENABLE_TESTS)
   if (CUTLASS_ENABLE_GTEST_UNIT_TESTS)
   add_dependencies(test_all test_unit)
   endif()
+  if (CUTLASS_ENABLE_PROFILER_UNIT_TESTS AND CUTLASS_BUILD_FOR_PROFILER_REGRESSIONS)
+    # Generate profiler based unit test
+    cutlass_generate_profiler_tests(
+      tup
+      DEPENDEES test_unit
+    )
+  endif()
+
 endif()
 
 if (CUTLASS_INSTALL_TESTS)

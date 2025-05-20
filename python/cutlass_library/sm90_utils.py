@@ -43,7 +43,7 @@ import os.path
 import shutil
 import sys
 import copy
-from typing import Any, Optional, Sequence, Tuple
+from typing import Any, Optional, Sequence, Tuple, List
 
 try:
   import builtins
@@ -153,6 +153,17 @@ def generate_int8_math_instruction_shapes_sm90(level: int):
     ]
     return filtered_list_of_wgmma_shapes
 
+def generate_mixed_dtype_math_instructions_shapes_sm90(wgmma_level: int, a_type: DataType, b_type: DataType):
+    # DataTypeSize are in the unit of bits
+    a_bytes = DataTypeSize[a_type] // 8
+    b_bytes = DataTypeSize[b_type] // 8
+    if a_bytes == 4 or b_bytes == 4:
+        return generate_tf32_math_instruction_shapes_sm90(wgmma_level)
+    elif a_bytes == 2 or b_bytes == 2:
+        return generate_fp16_bf16_math_instruction_shapes_sm90(wgmma_level)
+    else:
+        return generate_fp8_math_instruction_shapes_sm90(wgmma_level)
+
 ###########
 
 def generate_tf32_math_instructions_sm90(level: int):
@@ -217,6 +228,22 @@ def generate_fp8_math_instructions_sm90(level: int):
               OpcodeClass.TensorOp,
               MathOperation.multiply_add),
         ]
+    return math_instructions
+
+def generate_mixed_dtype_math_instructions_sm90(level: int, types_of_a_b_acc: List[Tuple[DataType, DataType, DataType]]):
+    wgmma_level = get_wgmma_level_from_global_level(level)
+    math_instructions = []
+    for a_type, b_type, acc_type in types_of_a_b_acc:
+        math_instruction_shapes = generate_mixed_dtype_math_instructions_shapes_sm90(wgmma_level, a_type, b_type)
+        for math_instruction_shape in math_instruction_shapes:
+            math_instructions += [
+                MathInstruction(
+                    math_instruction_shape,
+                    a_type, b_type, acc_type,
+                    OpcodeClass.TensorOp,
+                    MathOperation.multiply_add
+                ),
+            ]
     return math_instructions
 
 def generate_int8_math_instructions_sm90(level: int):
@@ -348,6 +375,13 @@ def generate_tile_descriptions_sm90(math_instructions, is_aligned: bool, level: 
     mma_multipliers, cluster_sizes = get_mma_multipliers(level), get_cluster_sizes(level, is_aligned)
     for math_inst, mma_mul, cluster_size in product(math_instructions, mma_multipliers, cluster_sizes):
 
+        # generator can stamp out duplicate kernels, because it doesn't explicitly set instruction
+        # shape for SM90 kernels, and the 3.X collective API doesn't directly expose them when using
+        # the auto kernel schedule.
+
+        math_inst_stub = copy.deepcopy(math_inst)
+        math_inst_stub.instruction_shape = [0, 0, 0]
+
         tile_desc = TileDescription(
             threadblock_shape=[
                 math_inst.instruction_shape[0] * mma_mul[0],
@@ -356,7 +390,7 @@ def generate_tile_descriptions_sm90(math_instructions, is_aligned: bool, level: 
             ],
             stages=0,
             warp_count=[4, 1, 1],
-            math_instruction=math_inst,
+            math_instruction=math_inst_stub,
             min_compute=90,
             max_compute=90,
             cluster_shape=cluster_size)
@@ -407,7 +441,7 @@ def can_tile_desc_use_shmem_in_epilogue(tile_description, data_types):
 
 
 def get_valid_schedules(tile_description, cuda_version, is_aligned, data_types, layout,
-                        instantiation_level, enable_fp8_fast_acc=True):
+                        instantiation_level, enable_fp8_fast_acc=True, gemm_kind=GemmKind.Universal3x):
     # Level 0: prune according to existing generator.py behavior
     # Level >= 1: no pruning
     level = get_pruning_level_from_global_level(instantiation_level)
@@ -427,8 +461,6 @@ def get_valid_schedules(tile_description, cuda_version, is_aligned, data_types, 
     FP32_TYPES = [DataType.f32, DataType.tf32]
     is_fp32 = data_types["a_type"] in FP32_TYPES and data_types["b_type"] in FP32_TYPES
     requires_transposed_epilogue = is_fp32 and layout[0][0] == LayoutType.RowMajor and layout[1][0] == LayoutType.RowMajor
-
-    is_sparse = tile_description.math_instruction.opcode_class == OpcodeClass.SparseTensorOp
 
     can_do_cooperative = is_tile_desc_compatible_with_cooperative(tile_description)
     can_do_tma_epilogue = is_aligned and not requires_transposed_epilogue and can_tile_desc_use_shmem_in_epilogue(tile_description, data_types)
@@ -464,6 +496,14 @@ def get_valid_schedules(tile_description, cuda_version, is_aligned, data_types, 
     if is_fp32 and (is_tn or is_nn) and (cta_n % cta_k != 0):
         return [], []
 
+    grouped = is_grouped(gemm_kind)
+    if grouped:
+        # the following cases are unsupported by grouped GEMM
+        if not is_aligned:
+            return [], []
+        if requires_transposed_epilogue:
+            return [], []
+
     # Early pruning
     if level < 1:
         # Don't stamp out FP16/BF16 kernels smaller than or equal to 64x128x64
@@ -477,20 +517,29 @@ def get_valid_schedules(tile_description, cuda_version, is_aligned, data_types, 
             if not is_void_c or d_type not in FP8_TYPES:
                 return [], []
             if CudaToolkitVersionSatisfies(cuda_version, 12, 1) and can_do_cooperative and can_do_tma_epilogue:
-                return [
-                    [
-                        KernelScheduleType.TmaWarpSpecializedCooperative,
-                        EpilogueScheduleType.TmaWarpSpecializedCooperative
-                    ],
-                    [
-                        KernelScheduleType.TmaWarpSpecializedCooperativeFP8FastAccum,
-                        EpilogueScheduleType.TmaWarpSpecializedCooperative
-                    ],
-                ] , []
+                schedules = []
+                if is_blockwise(gemm_kind):
+                    schedules.append(
+                        [
+                            to_grouped_schedule(KernelScheduleType.BlockwiseTmaWarpSpecializedCooperative, grouped),
+                            to_grouped_schedule(EpilogueScheduleType.TmaWarpSpecializedCooperative, grouped)
+                        ])
+                else:
+                    schedules.append(
+                        [
+                            to_grouped_schedule(KernelScheduleType.TmaWarpSpecializedCooperative, grouped),
+                            to_grouped_schedule(EpilogueScheduleType.TmaWarpSpecializedCooperative, grouped)
+                        ])
+                    schedules.append(
+                        [
+                            to_grouped_schedule(KernelScheduleType.TmaWarpSpecializedCooperativeFP8FastAccum, grouped),
+                            to_grouped_schedule(EpilogueScheduleType.TmaWarpSpecializedCooperative, grouped)
+                        ])
+                return schedules, []
             return [], []
 
         if is_fp8 and not is_large_fp8_tile:
-            valid_dtypes_for_c = [DataType.f32, DataType.bf16, DataType.f16]
+            valid_dtypes_for_c = [DataType.f32, DataType.bf16, DataType.f16, DataType.void]
             # Prune all configs with fp8 source, and all configs with non-fp8 output
             # that have different dtypes for source and output.
             if c_type not in valid_dtypes_for_c or (d_type not in FP8_TYPES and c_type != d_type):
@@ -504,7 +553,47 @@ def get_valid_schedules(tile_description, cuda_version, is_aligned, data_types, 
     if is_void_c and not can_do_tma_epilogue:
         return [], []
 
-    if not is_aligned:
+    # For mixed input data types
+    a_type_size = DataTypeSize[data_types["a_type"]]
+    b_type_size = DataTypeSize[data_types["b_type"]]
+    if a_type_size != b_type_size and CudaToolkitVersionSatisfies(cuda_version, 12, 1):
+        schedules = []
+        stream_k_schedules = []
+        epilogue_schedule = EpilogueScheduleType.TmaWarpSpecialized
+        if a_type_size > b_type_size:
+            epilogue_schedule = EpilogueScheduleType.EpilogueTransposed
+        
+        if not is_blockwise(gemm_kind):
+            schedules.append([
+                KernelScheduleType.TmaWarpSpecialized,
+                epilogue_schedule
+            ])
+            schedules.append([
+                KernelScheduleType.TmaWarpSpecializedPingpong,
+                epilogue_schedule
+            ])
+        if cta_m >= 128:
+            if a_type_size > b_type_size:
+                epilogue_schedule = EpilogueScheduleType.EpilogueTransposed
+            else:
+                epilogue_schedule = EpilogueScheduleType.TmaWarpSpecializedCooperative
+            if is_blockwise(gemm_kind):
+                schedules.append([
+                    KernelScheduleType.BlockwiseTmaWarpSpecializedCooperative,
+                    epilogue_schedule
+                ])
+            else:
+                schedules.append([
+                    KernelScheduleType.TmaWarpSpecializedCooperative,
+                    epilogue_schedule
+                ])
+                stream_k_schedules.append([
+                    KernelScheduleType.TmaWarpSpecializedCooperative,
+                    epilogue_schedule
+                ])
+        return schedules, stream_k_schedules
+
+    if not is_aligned and not is_blockwise(gemm_kind):
         schedules = [[KernelScheduleType.CpAsyncWarpSpecialized,
                     default_epilogue]]
         stream_k_schedules = []
@@ -522,8 +611,8 @@ def get_valid_schedules(tile_description, cuda_version, is_aligned, data_types, 
         return schedules, stream_k_schedules
 
     schedules = []
-    # Pruning: emit Void-C kernels with persistent kernels only
-    if level >= 1 or not is_void_c:
+    # Pruning: emit Void-C and Grouped kernels with persistent kernels only
+    if (level >= 1 or not is_void_c) and not grouped and not is_blockwise(gemm_kind):
         # Pruning: don't stamp out fp8 kernels with auto schedule
         if not is_fp8:
             schedules.append([KernelScheduleType.ScheduleAuto, auto_epilogue])
@@ -534,39 +623,50 @@ def get_valid_schedules(tile_description, cuda_version, is_aligned, data_types, 
         if can_do_tma_epilogue:
             assert not requires_transposed_epilogue
             # Inconsistency: fp8 pingpong only gets stamped out with fast accum
-            if not is_fp8 or level >= 1:
+            if (not is_fp8 or level >= 1) and not is_blockwise(gemm_kind):
                 schedules.append([
-                    KernelScheduleType.TmaWarpSpecializedPingpong,
-                    EpilogueScheduleType.TmaWarpSpecialized
+                    to_grouped_schedule(KernelScheduleType.TmaWarpSpecializedPingpong, grouped),
+                    to_grouped_schedule(EpilogueScheduleType.TmaWarpSpecialized, grouped)
                 ])
             if can_do_fp8_fast_accum:
                 schedules.append([
-                    KernelScheduleType.TmaWarpSpecializedPingpongFP8FastAccum,
-                    EpilogueScheduleType.TmaWarpSpecialized
+                    to_grouped_schedule(KernelScheduleType.TmaWarpSpecializedPingpongFP8FastAccum, grouped),
+                    to_grouped_schedule(EpilogueScheduleType.TmaWarpSpecialized, grouped)
                 ])
 
     if CudaToolkitVersionSatisfies(cuda_version, 12, 1):
-        # Pruning: don't stamp out fp8 ping-ponging kernel with non-tma epilogue
+        # Pruning: don't stamp out fp8 ping-pong kernel with non-tma epilogue
         if not is_fp8 or level >= 1:
-            schedules.append([KernelScheduleType.TmaWarpSpecializedPingpong, default_epilogue])
+            schedules.append([to_grouped_schedule(KernelScheduleType.TmaWarpSpecializedPingpong, grouped), to_grouped_schedule(default_epilogue, grouped)])
 
         if can_do_fp8_fast_accum:
-            schedules.append([KernelScheduleType.TmaWarpSpecializedFP8FastAccum, default_epilogue])
-            schedules.append([KernelScheduleType.TmaWarpSpecializedPingpongFP8FastAccum, default_epilogue])
+            if not grouped:
+                schedules.append([KernelScheduleType.TmaWarpSpecializedFP8FastAccum, default_epilogue])
+            schedules.append([to_grouped_schedule(KernelScheduleType.TmaWarpSpecializedPingpongFP8FastAccum, grouped), to_grouped_schedule(default_epilogue, grouped)])
 
         if can_do_cooperative:
-            schedules.append([
-                KernelScheduleType.TmaWarpSpecializedCooperative,
-                default_epilogue
-            ])
-            stream_k_schedules.append([
-                KernelScheduleType.TmaWarpSpecializedCooperative,
-                default_epilogue
-            ])
+            if is_blockwise(gemm_kind):
+                schedules.append([
+                    to_grouped_schedule(KernelScheduleType.BlockwiseTmaWarpSpecializedCooperative, grouped),
+                    to_grouped_schedule(default_epilogue, grouped)
+                ])
+                stream_k_schedules.append([
+                    KernelScheduleType.BlockwiseTmaWarpSpecializedCooperative,
+                    default_epilogue
+                ])
+            else:
+                schedules.append([
+                    to_grouped_schedule(KernelScheduleType.TmaWarpSpecializedCooperative, grouped),
+                    to_grouped_schedule(default_epilogue, grouped)
+                ])
+                stream_k_schedules.append([
+                    KernelScheduleType.TmaWarpSpecializedCooperative,
+                    default_epilogue
+                ])
             if can_do_fp8_fast_accum:
                 schedules.append([
-                    KernelScheduleType.TmaWarpSpecializedCooperativeFP8FastAccum,
-                    default_epilogue
+                    to_grouped_schedule(KernelScheduleType.TmaWarpSpecializedCooperativeFP8FastAccum, grouped),
+                    to_grouped_schedule(default_epilogue, grouped)
                 ])
                 stream_k_schedules.append([
                     KernelScheduleType.TmaWarpSpecializedCooperativeFP8FastAccum,
@@ -577,24 +677,36 @@ def get_valid_schedules(tile_description, cuda_version, is_aligned, data_types, 
         if can_do_tma_epilogue:
             assert not requires_transposed_epilogue
             if can_do_cooperative:
-                schedules.append([
-                    KernelScheduleType.TmaWarpSpecializedCooperative,
-                    EpilogueScheduleType.TmaWarpSpecializedCooperative
-                ])
-                stream_k_schedules.append([
-                    KernelScheduleType.TmaWarpSpecializedCooperative,
-                    EpilogueScheduleType.TmaWarpSpecializedCooperative
-                ])
+                if is_blockwise(gemm_kind):
+                    schedules.append([
+                        to_grouped_schedule(KernelScheduleType.BlockwiseTmaWarpSpecializedCooperative, grouped),
+                        to_grouped_schedule(EpilogueScheduleType.TmaWarpSpecializedCooperative, grouped)
+                    ])
+                    stream_k_schedules.append([
+                        KernelScheduleType.BlockwiseTmaWarpSpecializedCooperative,
+                        EpilogueScheduleType.TmaWarpSpecializedCooperative
+                    ])
+                else:
+                    schedules.append([
+                        to_grouped_schedule(KernelScheduleType.TmaWarpSpecializedCooperative, grouped),
+                        to_grouped_schedule(EpilogueScheduleType.TmaWarpSpecializedCooperative, grouped)
+                    ])
+                    stream_k_schedules.append([
+                        KernelScheduleType.TmaWarpSpecializedCooperative,
+                        EpilogueScheduleType.TmaWarpSpecializedCooperative
+                    ])
                 if can_do_fp8_fast_accum:
                     schedules.append([
-                        KernelScheduleType.TmaWarpSpecializedCooperativeFP8FastAccum,
-                        EpilogueScheduleType.TmaWarpSpecializedCooperative
+                        to_grouped_schedule(KernelScheduleType.TmaWarpSpecializedCooperativeFP8FastAccum, grouped),
+                        to_grouped_schedule(EpilogueScheduleType.TmaWarpSpecializedCooperative, grouped)
                     ])
                     stream_k_schedules.append([
                         KernelScheduleType.TmaWarpSpecializedCooperativeFP8FastAccum,
                         EpilogueScheduleType.TmaWarpSpecializedCooperative
                     ])
-
+    # Grouped GEMM do not support Stream-K scheduler
+    if grouped:
+        return schedules, []
     return schedules, stream_k_schedules
 
 

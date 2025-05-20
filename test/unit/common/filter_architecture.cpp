@@ -28,7 +28,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  **************************************************************************************************/
-
 #include <cuda_runtime_api.h>
 
 #include "cutlass_unit_test.h"
@@ -59,7 +58,10 @@ std::ostream &operator<<(std::ostream &out, cudaDeviceProp const &deviceProperti
 
   int deviceMajorMinor = deviceProperties.major * 10 + deviceProperties.minor;
   if (deviceMajorMinor) {
-    int32_t clock_MHz = deviceProperties.clockRate / 1000;
+    int32_t clock_MHz;
+    int32_t clock_KHz;
+    cudaDeviceGetAttribute(&clock_KHz, cudaDevAttrClockRate, 0);
+    clock_MHz = clock_KHz / 1000;
     out << "GPU(compute_"
       << deviceMajorMinor << ", "
       << deviceProperties.multiProcessorCount << " SMs @ " << clock_MHz << " MHz)";
@@ -118,6 +120,7 @@ void FilterArchitecture() {
     { "SM80*",                      80, kMaxDevice},
     { "SM89*",                      89, 89},
     { "SM90*",                      90, 90},
+    { "SM100*",                    100, 100}, 
     { 0, 0, false }
   };
 

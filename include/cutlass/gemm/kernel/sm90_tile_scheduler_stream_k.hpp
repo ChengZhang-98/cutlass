@@ -68,6 +68,19 @@ public:
   using RasterOrderOptions = UnderlyingScheduler::RasterOrderOptions;
   static constexpr bool IsDynamicPersistent = false;
 
+  using Pipeline = PipelineEmpty;
+  using PipelineStorage = typename Pipeline::SharedStorage;
+  using ThrottlePipeline = PipelineEmpty;
+  using ThrottlePipelineStorage = typename ThrottlePipeline::SharedStorage;
+  struct CLCResponse {};
+
+  class SharedStorage {
+  public:
+    CUTLASS_DEVICE PipelineStorage pipeline() { return PipelineStorage{}; }
+    CUTLASS_DEVICE ThrottlePipelineStorage throttle_pipeline() { return ThrottlePipelineStorage{}; }
+    CUTLASS_DEVICE CLCResponse* data() { return nullptr; }
+  };
+
   // Use a dummy barrier manager to simply get the type used to store the barrier
   using BarrierType = typename NamedBarrierManager<1>::T;
 
@@ -697,6 +710,17 @@ public:
     return cute::make_tuple(get_current_work(), true);
   }
 
+  // Kernel helper function to get next work tile
+  template <class TileSchedulerPipeline, class TileSchedulerPipelineState>
+  CUTLASS_DEVICE
+  auto
+  fetch_next_work(
+      WorkTileInfo work_tile_info,
+      TileSchedulerPipeline& scheduler_pipeline,
+      TileSchedulerPipelineState scheduler_pipe_consumer_state) {
+    return fetch_next_work(work_tile_info);
+  }
+
   // Returns the initial work tile info that will be computed over
   CUTLASS_DEVICE
   WorkTileInfo
@@ -714,6 +738,19 @@ public:
     auto [cta_m_in_cluster_, cta_n_in_cluster_, _] = block_id_in_cluster;
     uint64_t cta_m_in_cluster = static_cast<uint64_t>(cta_m_in_cluster_);
     uint64_t cta_n_in_cluster = static_cast<uint64_t>(cta_n_in_cluster_);
+    
+    // Determine the CTA's M and N offsets within the preferred cluster
+    // This simply finds the linear offset of the CTA within the cluster, and takes a divmod
+    // on it depending on the rasterization order used by the scheduler.
+    uint64_t cluster_linear_work_idx_tmp = params.div_cluster_size(linear_idx) * params.get_cluster_size();
+
+    if (params.raster_order_ == RasterOrder::AlongN) {
+      params.divmod_cluster_shape_minor_(cta_n_in_cluster, cta_m_in_cluster, linear_idx - cluster_linear_work_idx_tmp);
+    }
+    else {
+      params.divmod_cluster_shape_minor_(cta_m_in_cluster, cta_n_in_cluster, linear_idx - cluster_linear_work_idx_tmp);
+    }
+    
     return {static_cast<uint32_t>(cta_m_in_cluster), static_cast<uint32_t>(cta_n_in_cluster), _};
   }
 
@@ -946,6 +983,8 @@ private:
                                           params.divmod_cluster_blk_major_,
                                           params.log_swizzle_size_,
                                           params.raster_order_
+                                          , cta_m_in_cluster  
+                                          , cta_n_in_cluster  
                                         );
 
     // Set the M, N, and L block offsets
